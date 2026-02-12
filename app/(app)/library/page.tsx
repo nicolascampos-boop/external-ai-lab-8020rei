@@ -1,14 +1,15 @@
 import { createClient } from '@/lib/supabase/server'
 import MaterialCard from '@/components/material-card'
 import FilterBar from '@/components/filter-bar'
-import { CATEGORIES } from '@/lib/supabase/types'
+import { CATEGORIES, CONTENT_TYPES } from '@/lib/supabase/types'
 
 interface Props {
   searchParams: Promise<{
     search?: string
     category?: string
+    content_type?: string
+    week?: string
     sort?: string
-    file_type?: string
   }>
 }
 
@@ -28,13 +29,14 @@ export default async function LibraryPage({ searchParams }: Props) {
     query = query.contains('categories', [params.category])
   }
 
-  // File type filter
-  if (params.file_type && params.file_type !== 'all') {
-    if (params.file_type === 'csv') {
-      query = query.or('file_type.eq.text/csv,file_name.ilike.%.csv')
-    } else if (params.file_type === 'excel') {
-      query = query.or('file_type.ilike.%spreadsheet%,file_type.ilike.%ms-excel%,file_name.ilike.%.xlsx,file_name.ilike.%.xls')
-    }
+  // Content type filter
+  if (params.content_type && params.content_type !== 'all') {
+    query = query.eq('content_type', params.content_type)
+  }
+
+  // Week filter
+  if (params.week && params.week !== 'all') {
+    query = query.eq('week', params.week)
   }
 
   // Sort
@@ -65,10 +67,12 @@ export default async function LibraryPage({ searchParams }: Props) {
 
       <FilterBar
         categories={[...CATEGORIES]}
+        contentTypes={[...CONTENT_TYPES]}
         currentSearch={params.search || ''}
         currentCategory={params.category || 'all'}
+        currentContentType={params.content_type || 'all'}
+        currentWeek={params.week || 'all'}
         currentSort={params.sort || 'newest'}
-        currentFileType={params.file_type || 'all'}
       />
 
       {materials && materials.length > 0 ? (
@@ -80,7 +84,7 @@ export default async function LibraryPage({ searchParams }: Props) {
       ) : (
         <div className="bg-card rounded-xl border border-border p-12 text-center mt-6">
           <p className="text-muted">
-            {params.search || params.category !== 'all'
+            {params.search || params.category || params.content_type || params.week
               ? 'No materials match your filters.'
               : 'No materials uploaded yet.'}
           </p>

@@ -2,8 +2,19 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 
-export async function uploadMaterial(formData: FormData) {
+export interface ParsedMaterial {
+  title: string
+  link?: string
+  description?: string
+  content_type?: string
+  categories: string[]
+  week?: string
+  estimated_time?: string
+}
+
+export async function uploadMaterials(materials: ParsedMaterial[]) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -11,104 +22,48 @@ export async function uploadMaterial(formData: FormData) {
     redirect('/login')
   }
 
-  const title = formData.get('title') as string
-  const description = formData.get('description') as string
-  const categoriesRaw = formData.get('categories') as string
-  const guidelinesRaw = formData.get('guidelines') as string
-  const columnsRaw = formData.get('columns') as string
-  const headlinesRaw = formData.get('headlines') as string
-  const tagsRaw = formData.get('tags') as string
-  const file = formData.get('file') as File
-
-  let categories: string[] = []
-  try {
-    categories = JSON.parse(categoriesRaw || '[]')
-  } catch {
-    return { error: 'Invalid categories format.' }
+  if (!materials || materials.length === 0) {
+    return { error: 'No materials to upload.' }
   }
 
-  if (!title || categories.length === 0 || !file) {
-    return { error: 'Title, at least one category, and file are required.' }
+  // Validate each material has at least a title
+  for (let i = 0; i < materials.length; i++) {
+    if (!materials[i].title?.trim()) {
+      return { error: `Row ${i + 1} is missing a name/title.` }
+    }
   }
 
-  if (!guidelinesRaw?.trim()) {
-    return { error: 'Guidelines are required.' }
+  const rows = materials.map(m => ({
+    title: m.title.trim(),
+    link: m.link?.trim() || null,
+    description: m.description?.trim() || null,
+    content_type: m.content_type?.trim() || null,
+    categories: m.categories.length > 0 ? m.categories : ['AI Fundamentals'],
+    week: m.week?.trim() || null,
+    estimated_time: m.estimated_time?.trim() || null,
+    uploaded_by: user.id,
+  }))
+
+  // Batch insert in groups of 50
+  const batchSize = 50
+  let totalInserted = 0
+
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize)
+    const { error: insertError } = await supabase
+      .from('materials')
+      .insert(batch)
+
+    if (insertError) {
+      return { error: `Failed to insert batch ${Math.floor(i / batchSize) + 1}: ${insertError.message}` }
+    }
+    totalInserted += batch.length
   }
 
-  if (!columnsRaw?.trim()) {
-    return { error: 'Column names are required.' }
-  }
+  revalidatePath('/library')
+  revalidatePath('/dashboard')
 
-  if (!headlinesRaw?.trim()) {
-    return { error: 'Headlines are required.' }
-  }
-
-  const allowedTypes = [
-    'text/csv',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  ]
-  const ext = file.name.split('.').pop()?.toLowerCase()
-
-  if (!allowedTypes.includes(file.type) && !['csv', 'xls', 'xlsx'].includes(ext || '')) {
-    return { error: 'Only CSV and Excel (.xls, .xlsx) files are allowed.' }
-  }
-
-  if (file.size > 50 * 1024 * 1024) {
-    return { error: 'File size must be under 50MB.' }
-  }
-
-  // Upload file to Supabase Storage
-  const fileExt = file.name.split('.').pop()
-  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`
-  const filePath = `materials/${user.id}/${fileName}`
-
-  const { error: uploadError } = await supabase.storage
-    .from('materials')
-    .upload(filePath, file)
-
-  if (uploadError) {
-    return { error: `Upload failed: ${uploadError.message}` }
-  }
-
-  const { data: urlData } = supabase.storage
-    .from('materials')
-    .getPublicUrl(filePath)
-
-  const tags = tagsRaw
-    ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean)
-    : []
-
-  const columnsList = columnsRaw
-    .split(',').map(c => c.trim()).filter(Boolean)
-
-  const headlinesList = headlinesRaw
-    .split(',').map(h => h.trim()).filter(Boolean)
-
-  const { data, error: insertError } = await supabase
-    .from('materials')
-    .insert({
-      title,
-      description: description || null,
-      file_url: urlData.publicUrl,
-      file_name: file.name,
-      file_type: file.type || `application/${ext}`,
-      file_size: file.size,
-      categories,
-      guidelines: guidelinesRaw.trim(),
-      columns: columnsList,
-      headlines: headlinesList,
-      tags,
-      uploaded_by: user.id,
-    })
-    .select('id')
-    .single()
-
-  if (insertError) {
-    return { error: `Failed to save material: ${insertError.message}` }
-  }
-
-  redirect(`/materials/${data.id}`)
+  return { success: true, count: totalInserted }
 }
 
 export async function deleteMaterial(materialId: string) {
