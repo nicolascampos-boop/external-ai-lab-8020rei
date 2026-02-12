@@ -34,8 +34,8 @@ export async function GET(request: Request) {
       }
     )
 
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error && data.user) {
+    const { data, error: authError } = await supabase.auth.exchangeCodeForSession(code)
+    if (!authError && data.user) {
       // Ensure profile exists (handles users who existed before a DB reset)
       const { data: profile } = await supabase
         .from('profiles')
@@ -56,5 +56,6 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(`${redirectBase}/login?error=auth_callback_error`)
+  const errorDetail = code ? `code_exchange_failed` : 'no_code_received'
+  return NextResponse.redirect(`${redirectBase}/login?error=${encodeURIComponent(errorDetail)}`)
 }
