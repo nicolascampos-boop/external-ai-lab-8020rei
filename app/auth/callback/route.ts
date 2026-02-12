@@ -11,7 +11,6 @@ export async function GET(request: Request) {
   const redirectBase = isLocalEnv ? origin : forwardedHost ? `https://${forwardedHost}` : origin
 
   if (code) {
-    // Create redirect response FIRST so we can set auth cookies directly on it
     const response = NextResponse.redirect(`${redirectBase}${next}`)
 
     const supabase = createServerClient(
