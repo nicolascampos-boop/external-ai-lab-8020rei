@@ -14,11 +14,15 @@ export interface Material {
   id: string
   title: string
   description: string | null
-  file_url: string
-  file_name: string
-  file_type: string
-  file_size: number
+  link: string | null
+  content_type: string | null
   categories: string[]
+  week: string | null
+  estimated_time: string | null
+  file_url: string | null
+  file_name: string | null
+  file_type: string | null
+  file_size: number | null
   guidelines: string | null
   columns: string[] | null
   headlines: string[] | null
@@ -62,3 +66,24 @@ export const CATEGORIES = [
 ] as const
 
 export type Category = (typeof CATEGORIES)[number]
+
+export const CONTENT_TYPES = [
+  'Video',
+  'Documentation',
+  'Course',
+  'Platform',
+  'Community',
+  'Social Media Post',
+  'Article',
+  'Case Study',
+] as const
+
+export type ContentType = (typeof CONTENT_TYPES)[number]
+
+export const WEEKS = [
+  'Week 1',
+  'Week 2',
+  'Week 3',
+  'Week 4',
+  'Optional',
+] as const

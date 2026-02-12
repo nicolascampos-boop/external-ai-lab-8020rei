@@ -5,18 +5,22 @@ import { useCallback, useState } from 'react'
 
 interface FilterBarProps {
   categories: string[]
+  contentTypes: string[]
   currentSearch: string
   currentCategory: string
+  currentContentType: string
+  currentWeek: string
   currentSort: string
-  currentFileType: string
 }
 
 export default function FilterBar({
   categories,
+  contentTypes,
   currentSearch,
   currentCategory,
+  currentContentType,
+  currentWeek,
   currentSort,
-  currentFileType,
 }: FilterBarProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -68,15 +72,30 @@ export default function FilterBar({
           ))}
         </select>
 
-        {/* File type filter */}
+        {/* Content type filter */}
         <select
-          value={currentFileType}
-          onChange={e => updateParams('file_type', e.target.value)}
+          value={currentContentType}
+          onChange={e => updateParams('content_type', e.target.value)}
           className="px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         >
           <option value="all">All Types</option>
-          <option value="csv">CSV</option>
-          <option value="excel">Excel</option>
+          {contentTypes.map(type => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
+
+        {/* Week filter */}
+        <select
+          value={currentWeek}
+          onChange={e => updateParams('week', e.target.value)}
+          className="px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+        >
+          <option value="all">All Weeks</option>
+          <option value="Week 1">Week 1</option>
+          <option value="Week 2">Week 2</option>
+          <option value="Week 3">Week 3</option>
+          <option value="Week 4">Week 4</option>
+          <option value="Optional">Optional</option>
         </select>
 
         {/* Sort */}
