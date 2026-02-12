@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import { uploadMaterial } from '@/lib/actions/materials'
 import { CATEGORIES } from '@/lib/supabase/types'
 
@@ -10,8 +11,8 @@ const UPLOAD_CRITERIA = [
   { label: 'Title provided', key: 'title' },
   { label: 'At least one category selected', key: 'category' },
   { label: 'Guidelines provided', key: 'guidelines' },
-  { label: 'Column names listed', key: 'columns' },
-  { label: 'Headlines provided', key: 'headlines' },
+  { label: 'Columns detected from file', key: 'columns' },
+  { label: 'Key topics provided', key: 'headlines' },
   { label: 'Description provided', key: 'description' },
 ]
 
@@ -25,7 +26,10 @@ export default function UploadForm() {
   const [description, setDescription] = useState('')
   const [guidelines, setGuidelines] = useState('')
   const [columns, setColumns] = useState('')
+  const [detectedColumns, setDetectedColumns] = useState<string[]>([])
+  const [parsingFile, setParsingFile] = useState(false)
   const [headlines, setHeadlines] = useState('')
+  const [rowCount, setRowCount] = useState<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   function handleDrop(e: React.DragEvent) {
@@ -40,7 +44,7 @@ export default function UploadForm() {
     if (selected) validateAndSetFile(selected)
   }
 
-  function validateAndSetFile(f: File) {
+  async function validateAndSetFile(f: File) {
     const allowed = [
       'text/csv',
       'application/vnd.ms-excel',
@@ -57,6 +61,32 @@ export default function UploadForm() {
     }
     setError(null)
     setFile(f)
+
+    // Auto-detect columns from the file
+    setParsingFile(true)
+    try {
+      const reader = new FileReader()
+      const data = await new Promise<ArrayBuffer>((resolve, reject) => {
+        reader.onload = (e) => resolve(e.target?.result as ArrayBuffer)
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsArrayBuffer(f)
+      })
+      const workbook = XLSX.read(data, { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][]
+      if (rows.length > 0) {
+        const headers = (rows[0] as string[])
+          .filter(h => h != null && String(h).trim() !== '')
+          .map(h => String(h).trim())
+        setDetectedColumns(headers)
+        setColumns(headers.join(', '))
+        setRowCount(rows.length - 1) // subtract header row
+      }
+    } catch {
+      // If parsing fails, user can still type columns manually
+      setDetectedColumns([])
+    }
+    setParsingFile(false)
   }
 
   function toggleCategory(cat: string) {
@@ -199,7 +229,11 @@ export default function UploadForm() {
               </svg>
             </div>
             <p className="font-medium text-gray-900">{file.name}</p>
-            <p className="text-sm text-muted mt-1">{fileSize} &middot; Click to change</p>
+            <p className="text-sm text-muted mt-1">
+              {fileSize}
+              {rowCount !== null && ` · ${rowCount} rows`}
+              {' · Click to change'}
+            </p>
           </div>
         ) : (
           <div>
@@ -214,6 +248,35 @@ export default function UploadForm() {
         )}
       </div>
 
+      {/* Detected columns preview */}
+      {parsingFile && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-700">Reading file columns...</p>
+        </div>
+      )}
+      {detectedColumns.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h4 className="text-sm font-semibold text-blue-800">
+              {detectedColumns.length} columns detected from your file
+            </h4>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {detectedColumns.map((col, i) => (
+              <span key={i} className="text-xs px-2.5 py-1 bg-white text-blue-700 border border-blue-200 rounded-lg font-mono">
+                {col}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-blue-600 mt-2">
+            These column headers were read directly from your file&apos;s first row.
+          </p>
+        </div>
+      )}
+
       {/* Title */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
@@ -222,7 +285,7 @@ export default function UploadForm() {
           value={title}
           onChange={e => setTitle(e.target.value)}
           required
-          placeholder="e.g. Customer Support Agent Training Data"
+          placeholder="e.g. AI Courses Resources, Prompt Engineering Dataset"
           className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         />
       </div>
@@ -235,7 +298,7 @@ export default function UploadForm() {
           value={description}
           onChange={e => setDescription(e.target.value)}
           rows={2}
-          placeholder="Brief description of the material content..."
+          placeholder="e.g. Curated list of AI training resources with ratings, categories, and course stage mappings..."
           className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
         />
       </div>
@@ -246,35 +309,46 @@ export default function UploadForm() {
         <textarea
           value={guidelines}
           onChange={e => setGuidelines(e.target.value)}
-          rows={3}
-          placeholder="Describe the purpose, rules, and quality standards for this training data..."
+          rows={4}
+          placeholder={"Explain what each column in your file means. For example:\n- Name: The resource title\n- Link: URL to the resource\n- Category: Topic area (e.g. AI Fundamentals, Prompt Engineering)\n- Average: Quality rating from 1-5\n- Stage: Which course week/stage this belongs to"}
           className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
         />
-        <p className="text-xs text-muted mt-1">What should reviewers know about how this data should be used?</p>
+        <p className="text-xs text-muted mt-1">
+          Describe what each column means, how the data should be used, and any quality standards reviewers should know about.
+        </p>
       </div>
 
-      {/* Columns */}
+      {/* Columns (auto-filled, editable) */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Columns *</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Columns *
+          {detectedColumns.length > 0 && (
+            <span className="text-green-600 font-normal ml-2">(auto-detected from file)</span>
+          )}
+        </label>
         <input
           value={columns}
           onChange={e => setColumns(e.target.value)}
-          placeholder="Comma-separated, e.g. prompt, response, context, rating"
+          placeholder={file ? 'No column headers detected - type them manually' : 'Upload a file first to auto-detect columns, or type manually'}
           className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         />
-        <p className="text-xs text-muted mt-1">List the column names/headers in your file</p>
+        <p className="text-xs text-muted mt-1">
+          {detectedColumns.length > 0
+            ? 'Auto-filled from your file. You can edit if needed.'
+            : 'Comma-separated list of column headers in your file (e.g. Name, Link, Category, Rating)'}
+        </p>
       </div>
 
-      {/* Headlines */}
+      {/* Key Topics */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Headlines *</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Key Topics *</label>
         <input
           value={headlines}
           onChange={e => setHeadlines(e.target.value)}
-          placeholder="Comma-separated, e.g. Main topic, Key findings, Methodology"
+          placeholder="e.g. AI Fundamentals, Prompt Engineering, Workflow Automation, Agent Development"
           className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         />
-        <p className="text-xs text-muted mt-1">Key headlines or topics covered in this dataset</p>
+        <p className="text-xs text-muted mt-1">Main topics or subject areas covered in this dataset (comma-separated)</p>
       </div>
 
       {/* Categories - Multi-select */}
