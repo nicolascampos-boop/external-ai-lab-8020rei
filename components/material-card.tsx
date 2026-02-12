@@ -2,10 +2,12 @@ import Link from 'next/link'
 import type { MaterialWithScores } from '@/lib/supabase/types'
 
 export default function MaterialCard({ material }: { material: MaterialWithScores }) {
-  const fileIcon = material.file_type.includes('pdf') ? 'PDF' : 'DOCX'
+  const fileIcon = material.file_type.includes('csv') || material.file_name?.endsWith('.csv') ? 'CSV' : 'XLSX'
   const overallScore = material.vote_count > 0
     ? ((material.avg_quality + material.avg_relevance) / 2).toFixed(1)
     : '—'
+
+  const categories = material.categories || []
 
   return (
     <Link
@@ -14,15 +16,20 @@ export default function MaterialCard({ material }: { material: MaterialWithScore
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-              fileIcon === 'PDF' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+              fileIcon === 'CSV' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
             }`}>
               {fileIcon}
             </span>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-              {material.category}
-            </span>
+            {categories.slice(0, 3).map(cat => (
+              <span key={cat} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                {cat}
+              </span>
+            ))}
+            {categories.length > 3 && (
+              <span className="text-xs text-muted">+{categories.length - 3}</span>
+            )}
           </div>
           <h3 className="font-semibold text-gray-900 truncate">{material.title}</h3>
           {material.description && (

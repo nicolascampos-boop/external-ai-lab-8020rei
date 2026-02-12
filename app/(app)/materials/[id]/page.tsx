@@ -45,7 +45,7 @@ export default async function MaterialDetailPage({ params }: Props) {
     .eq('material_id', id)
     .order('created_at', { ascending: false })
 
-  const fileIcon = material.file_type.includes('pdf') ? 'PDF' : 'DOCX'
+  const fileIcon = material.file_type.includes('csv') || material.file_name?.endsWith('.csv') ? 'CSV' : 'XLSX'
   const overallScore = material.vote_count > 0
     ? ((material.avg_quality + material.avg_relevance) / 2).toFixed(1)
     : null
@@ -65,15 +65,17 @@ export default async function MaterialDetailPage({ params }: Props) {
         <div className="lg:col-span-2 space-y-6">
           {/* Material info */}
           <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
-                fileIcon === 'PDF' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                fileIcon === 'CSV' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
               }`}>
                 {fileIcon}
               </span>
-              <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                {material.category}
-              </span>
+              {(material.categories || []).map((cat: string) => (
+                <span key={cat} className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                  {cat}
+                </span>
+              ))}
             </div>
 
             <h1 className="text-2xl font-bold text-gray-900">{material.title}</h1>
@@ -90,6 +92,42 @@ export default async function MaterialDetailPage({ params }: Props) {
                     {tag}
                   </span>
                 ))}
+              </div>
+            )}
+
+            {/* Guidelines */}
+            {material.guidelines && (
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-amber-800 mb-1">Guidelines</h3>
+                <p className="text-sm text-amber-700 whitespace-pre-wrap">{material.guidelines}</p>
+              </div>
+            )}
+
+            {/* Columns */}
+            {material.columns && material.columns.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Columns</h3>
+                <div className="flex flex-wrap gap-2">
+                  {material.columns.map((col: string) => (
+                    <span key={col} className="text-xs px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg font-mono">
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Headlines */}
+            {material.headlines && material.headlines.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Headlines</h3>
+                <div className="flex flex-wrap gap-2">
+                  {material.headlines.map((headline: string) => (
+                    <span key={headline} className="text-xs px-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg">
+                      {headline}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 

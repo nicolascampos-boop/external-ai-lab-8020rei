@@ -125,7 +125,7 @@ function MaterialsTable({ materials }: { materials: MaterialWithScores[] }) {
         <thead>
           <tr className="bg-gray-50 border-b border-border">
             <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Title</th>
-            <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Category</th>
+            <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Categories</th>
             <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Score</th>
             <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Votes</th>
             <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Uploaded</th>
@@ -139,9 +139,16 @@ function MaterialsTable({ materials }: { materials: MaterialWithScores[] }) {
                 <span className="text-sm font-medium text-gray-900">{mat.title}</span>
               </td>
               <td className="px-5 py-3">
-                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                  {mat.category}
-                </span>
+                <div className="flex flex-wrap gap-1">
+                  {(mat.categories || []).slice(0, 2).map(cat => (
+                    <span key={cat} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                      {cat}
+                    </span>
+                  ))}
+                  {(mat.categories || []).length > 2 && (
+                    <span className="text-xs text-muted">+{mat.categories.length - 2}</span>
+                  )}
+                </div>
               </td>
               <td className="px-5 py-3 text-sm text-muted">
                 {mat.vote_count > 0 ? mat.avg_overall.toFixed(1) : '—'}

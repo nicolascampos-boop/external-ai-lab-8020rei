@@ -75,8 +75,8 @@ export default function FilterBar({
           className="px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         >
           <option value="all">All Types</option>
-          <option value="pdf">PDF</option>
-          <option value="docx">DOCX</option>
+          <option value="csv">CSV</option>
+          <option value="excel">Excel</option>
         </select>
 
         {/* Sort */}

@@ -25,15 +25,15 @@ export default async function LibraryPage({ searchParams }: Props) {
 
   // Category filter
   if (params.category && params.category !== 'all') {
-    query = query.eq('category', params.category)
+    query = query.contains('categories', [params.category])
   }
 
   // File type filter
   if (params.file_type && params.file_type !== 'all') {
-    if (params.file_type === 'pdf') {
-      query = query.eq('file_type', 'application/pdf')
-    } else if (params.file_type === 'docx') {
-      query = query.like('file_type', '%wordprocessingml%')
+    if (params.file_type === 'csv') {
+      query = query.or('file_type.eq.text/csv,file_name.ilike.%.csv')
+    } else if (params.file_type === 'excel') {
+      query = query.or('file_type.ilike.%spreadsheet%,file_type.ilike.%ms-excel%,file_name.ilike.%.xlsx,file_name.ilike.%.xls')
     }
   }
 

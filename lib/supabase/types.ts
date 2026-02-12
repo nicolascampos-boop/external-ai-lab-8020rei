@@ -18,7 +18,10 @@ export interface Material {
   file_name: string
   file_type: string
   file_size: number
-  category: string
+  categories: string[]
+  guidelines: string | null
+  columns: string[] | null
+  headlines: string[] | null
   tags: string[]
   uploaded_by: string | null
   created_at: string
@@ -44,13 +47,18 @@ export interface MaterialWithScores extends Material {
 }
 
 export const CATEGORIES = [
+  'AI Fundamentals',
+  'Implementation Strategy',
+  'Applied Use Cases',
+  'Agent Development',
+  'Workflow Automation',
+  'AI-Assisted Coding',
+  'Platform Deep-Dives',
+  'UX Design',
   'Prompt Engineering',
-  'Fine-tuning',
-  'RAG',
-  'Evaluation',
-  'Safety & Alignment',
-  'General AI',
-  'Other',
+  'Organizational Impact',
+  'Research Methodology',
+  'Conversation Design',
 ] as const
 
 export type Category = (typeof CATEGORIES)[number]

@@ -13,22 +13,45 @@ export async function uploadMaterial(formData: FormData) {
 
   const title = formData.get('title') as string
   const description = formData.get('description') as string
-  const category = formData.get('category') as string
+  const categoriesRaw = formData.get('categories') as string
+  const guidelinesRaw = formData.get('guidelines') as string
+  const columnsRaw = formData.get('columns') as string
+  const headlinesRaw = formData.get('headlines') as string
   const tagsRaw = formData.get('tags') as string
   const file = formData.get('file') as File
 
-  if (!title || !category || !file) {
-    return { error: 'Title, category, and file are required.' }
+  let categories: string[] = []
+  try {
+    categories = JSON.parse(categoriesRaw || '[]')
+  } catch {
+    return { error: 'Invalid categories format.' }
+  }
+
+  if (!title || categories.length === 0 || !file) {
+    return { error: 'Title, at least one category, and file are required.' }
+  }
+
+  if (!guidelinesRaw?.trim()) {
+    return { error: 'Guidelines are required.' }
+  }
+
+  if (!columnsRaw?.trim()) {
+    return { error: 'Column names are required.' }
+  }
+
+  if (!headlinesRaw?.trim()) {
+    return { error: 'Headlines are required.' }
   }
 
   const allowedTypes = [
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/msword',
+    'text/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   ]
+  const ext = file.name.split('.').pop()?.toLowerCase()
 
-  if (!allowedTypes.includes(file.type)) {
-    return { error: 'Only PDF and DOCX files are allowed.' }
+  if (!allowedTypes.includes(file.type) && !['csv', 'xls', 'xlsx'].includes(ext || '')) {
+    return { error: 'Only CSV and Excel (.xls, .xlsx) files are allowed.' }
   }
 
   if (file.size > 50 * 1024 * 1024) {
@@ -56,6 +79,12 @@ export async function uploadMaterial(formData: FormData) {
     ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean)
     : []
 
+  const columnsList = columnsRaw
+    .split(',').map(c => c.trim()).filter(Boolean)
+
+  const headlinesList = headlinesRaw
+    .split(',').map(h => h.trim()).filter(Boolean)
+
   const { data, error: insertError } = await supabase
     .from('materials')
     .insert({
@@ -63,9 +92,12 @@ export async function uploadMaterial(formData: FormData) {
       description: description || null,
       file_url: urlData.publicUrl,
       file_name: file.name,
-      file_type: file.type,
+      file_type: file.type || `application/${ext}`,
       file_size: file.size,
-      category,
+      categories,
+      guidelines: guidelinesRaw.trim(),
+      columns: columnsList,
+      headlines: headlinesList,
       tags,
       uploaded_by: user.id,
     })
