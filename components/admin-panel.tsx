@@ -66,6 +66,7 @@ function UsersTable({ users }: { users: Profile[] }) {
             <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Email</th>
             <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Role</th>
             <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Joined</th>
+            <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Last Login</th>
             <th className="text-right px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
@@ -92,6 +93,11 @@ function UsersTable({ users }: { users: Profile[] }) {
               </td>
               <td className="px-5 py-3 text-sm text-muted">
                 {new Date(user.created_at).toLocaleDateString()}
+              </td>
+              <td className="px-5 py-3 text-sm text-muted">
+                {user.last_login
+                  ? new Date(user.last_login).toLocaleDateString() + ' ' + new Date(user.last_login).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : '—'}
               </td>
               <td className="px-5 py-3 text-right">
                 <button

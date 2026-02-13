@@ -31,7 +31,7 @@ export default function Sidebar({ profile }: { profile: Profile }) {
     : navItems
 
   return (
-    <aside className="w-64 bg-sidebar min-h-screen flex flex-col">
+    <aside className="w-64 bg-sidebar min-h-screen flex flex-col fixed left-0 top-0 bottom-0 overflow-y-auto">
       {/* Header */}
       <div className="p-5 border-b border-white/10">
         <div className="flex items-center gap-3">
@@ -70,7 +70,10 @@ export default function Sidebar({ profile }: { profile: Profile }) {
 
       {/* Profile / Sign Out */}
       <div className="p-3 border-t border-white/10">
-        <div className="flex items-center gap-3 px-3 py-2">
+        <Link
+          href="/admin"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-sidebar-hover transition-colors"
+        >
           <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-white text-sm font-medium">
             {profile.full_name?.charAt(0) || profile.email.charAt(0).toUpperCase()}
           </div>
@@ -80,7 +83,7 @@ export default function Sidebar({ profile }: { profile: Profile }) {
             </p>
             <p className="text-gray-400 text-xs capitalize">{profile.role}</p>
           </div>
-        </div>
+        </Link>
         <button
           onClick={handleSignOut}
           className="mt-1 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-sidebar-hover hover:text-white transition-colors"

@@ -8,6 +8,7 @@ export interface Profile {
   role: UserRole
   created_at: string
   updated_at: string
+  last_login: string | null
 }
 
 export interface Material {
@@ -97,5 +98,7 @@ export const WEEKS = [
   'Week 2',
   'Week 3',
   'Week 4',
+  'Week 5',
+  'Week 6',
   'Optional',
 ] as const

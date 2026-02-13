@@ -27,18 +27,26 @@ export default async function AppLayout({
         email: user.email!,
         full_name: user.user_metadata?.full_name || user.user_metadata?.name || null,
         avatar_url: user.user_metadata?.avatar_url || null,
+        last_login: new Date().toISOString(),
       })
       .select()
       .single()
 
     if (error || !newProfile) redirect('/login')
     profile = newProfile
+  } else {
+    // Update last_login timestamp (fire and forget, don't block rendering)
+    supabase
+      .from('profiles')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', user.id)
+      .then(() => {}) // Silently ignore errors
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="min-h-screen">
       <Sidebar profile={profile} />
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="ml-64 p-8 overflow-auto">
         {children}
       </main>
     </div>

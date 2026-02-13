@@ -15,6 +15,8 @@ function normalizeWeek(raw: string): string {
   if (s.includes('2') || s.includes('second') || s.includes('two')) return 'Week 2'
   if (s.includes('3') || s.includes('third') || s.includes('three')) return 'Week 3'
   if (s.includes('4') || s.includes('fourth') || s.includes('four')) return 'Week 4'
+  if (s.includes('5') || s.includes('fifth') || s.includes('five')) return 'Week 5'
+  if (s.includes('6') || s.includes('sixth') || s.includes('six')) return 'Week 6'
   // If it already says "Week X", return as-is
   if (s.startsWith('week')) return raw.trim()
   return raw.trim()
