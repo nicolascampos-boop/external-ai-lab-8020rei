@@ -11,6 +11,8 @@ export interface ParsedMaterial {
   content_type?: string
   categories: string[]
   initial_score?: number
+  initial_quality?: number
+  initial_relevance?: number
   week?: string
   estimated_time?: string
 }
@@ -41,6 +43,8 @@ export async function uploadMaterials(materials: ParsedMaterial[]) {
     content_type: m.content_type?.trim() || null,
     categories: m.categories.length > 0 ? m.categories : [],
     initial_score: m.initial_score ?? null,
+    initial_quality: m.initial_quality ?? null,
+    initial_relevance: m.initial_relevance ?? null,
     week: m.week?.trim() || null,
     estimated_time: m.estimated_time?.trim() || null,
     uploaded_by: user.id,

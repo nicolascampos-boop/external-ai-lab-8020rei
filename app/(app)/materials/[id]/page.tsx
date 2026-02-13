@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import VoteWidget from '@/components/vote-widget'
+import ReviewReactions from '@/components/review-reactions'
 
 const CONTENT_TYPE_COLORS: Record<string, string> = {
   'Video': 'bg-rose-100 text-rose-700',
@@ -44,7 +45,7 @@ export default async function MaterialDetailPage({ params }: Props) {
   // Get current user's vote
   const { data: existingVote } = await supabase
     .from('votes')
-    .select('quality_score, relevance_score')
+    .select('quality_score, relevance_score, comment')
     .eq('material_id', id)
     .eq('user_id', user!.id)
     .single()
@@ -52,9 +53,29 @@ export default async function MaterialDetailPage({ params }: Props) {
   // Get all votes for this material
   const { data: votes } = await supabase
     .from('votes')
-    .select('quality_score, relevance_score, user_id, profiles(full_name, email)')
+    .select('id, quality_score, relevance_score, comment, created_at, user_id, profiles(full_name, email)')
     .eq('material_id', id)
     .order('created_at', { ascending: false })
+
+  // Get reaction counts and user reactions for each vote
+  const voteIds = votes?.map(v => v.id) || []
+  const { data: reactions } = voteIds.length > 0
+    ? await supabase
+        .from('vote_reactions')
+        .select('vote_id, user_id, reaction')
+        .in('vote_id', voteIds)
+    : { data: [] }
+
+  // Calculate reaction counts and user reactions per vote
+  const reactionsByVote = (reactions || []).reduce((acc, r) => {
+    if (!acc[r.vote_id]) {
+      acc[r.vote_id] = { likes: 0, dislikes: 0, userReaction: null }
+    }
+    if (r.reaction === 'like') acc[r.vote_id].likes++
+    if (r.reaction === 'dislike') acc[r.vote_id].dislikes++
+    if (r.user_id === user!.id) acc[r.vote_id].userReaction = r.reaction
+    return acc
+  }, {} as Record<string, { likes: number; dislikes: number; userReaction: 'like' | 'dislike' | null }>)
 
   const overallScore = material.vote_count > 0
     ? ((material.avg_quality + material.avg_relevance) / 2).toFixed(1)
@@ -62,7 +83,15 @@ export default async function MaterialDetailPage({ params }: Props) {
       ? material.initial_score.toFixed(1)
       : null
 
-  const scoreLabel = material.vote_count > 0 ? 'Overall Score' : material.initial_score ? 'Imported Score' : 'No Score Yet'
+  const scoreLabel = material.vote_count > 0 ? 'Overall Score' : material.initial_score ? 'Total Score' : 'No Score Yet'
+
+  // Get quality and relevance for imported materials
+  const displayQuality = material.vote_count > 0
+    ? material.avg_quality.toFixed(1)
+    : material.initial_quality?.toFixed(1) ?? '—'
+  const displayRelevance = material.vote_count > 0
+    ? material.avg_relevance.toFixed(1)
+    : material.initial_relevance?.toFixed(1) ?? '—'
 
   return (
     <div className="max-w-4xl">
@@ -152,7 +181,14 @@ export default async function MaterialDetailPage({ params }: Props) {
                   <svg className="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
-                  <span>Imported score: {material.initial_score.toFixed(1)}/5</span>
+                  <span>
+                    Total score: {material.initial_score.toFixed(1)}/5
+                    {material.initial_quality && material.initial_relevance && (
+                      <span className="text-muted ml-1">
+                        (Q: {material.initial_quality.toFixed(1)}, R: {material.initial_relevance.toFixed(1)})
+                      </span>
+                    )}
+                  </span>
                 </div>
               )}
             </div>
@@ -170,23 +206,48 @@ export default async function MaterialDetailPage({ params }: Props) {
               Reviews ({material.vote_count})
             </h3>
             {votes && votes.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {votes.map((vote: any) => {
                   const profile = Array.isArray(vote.profiles) ? vote.profiles[0] : vote.profiles
+                  const reviewDate = new Date(vote.created_at).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  })
+                  const voteReactions = reactionsByVote[vote.id] || { likes: 0, dislikes: 0, userReaction: null }
                   return (
-                  <div key={vote.user_id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium">
-                        {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
+                  <div key={vote.id} className="pb-4 border-b border-border last:border-0">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium flex-shrink-0">
+                          {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-700">
+                              {profile?.full_name || profile?.email || 'Anonymous'}
+                            </span>
+                            <span className="text-xs text-muted">•</span>
+                            <span className="text-xs text-muted">{reviewDate}</span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-xs text-muted">Quality: {vote.quality_score}/5</span>
+                            <span className="text-xs text-muted">Relevance: {vote.relevance_score}/5</span>
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-sm font-medium text-gray-700">
-                        {profile?.full_name || profile?.email || 'Anonymous'}
-                      </span>
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-muted">
-                      <span>Quality: {vote.quality_score}/5</span>
-                      <span>Relevance: {vote.relevance_score}/5</span>
+                    {vote.comment && (
+                      <p className="text-sm text-gray-700 mt-2 ml-11">{vote.comment}</p>
+                    )}
+                    <div className="mt-3 ml-11">
+                      <ReviewReactions
+                        voteId={vote.id}
+                        initialLikes={voteReactions.likes}
+                        initialDislikes={voteReactions.dislikes}
+                        userReaction={voteReactions.userReaction}
+                      />
                     </div>
                   </div>
                   )
@@ -216,15 +277,11 @@ export default async function MaterialDetailPage({ params }: Props) {
             <p className="text-sm text-muted mt-3">{scoreLabel}</p>
             <div className="flex justify-center gap-6 mt-4 text-sm">
               <div>
-                <p className="font-semibold text-gray-900">
-                  {material.vote_count > 0 ? material.avg_quality.toFixed(1) : '—'}
-                </p>
+                <p className="font-semibold text-gray-900">{displayQuality}</p>
                 <p className="text-muted text-xs">Quality</p>
               </div>
               <div>
-                <p className="font-semibold text-gray-900">
-                  {material.vote_count > 0 ? material.avg_relevance.toFixed(1) : '—'}
-                </p>
+                <p className="font-semibold text-gray-900">{displayRelevance}</p>
                 <p className="text-muted text-xs">Relevance</p>
               </div>
               <div>

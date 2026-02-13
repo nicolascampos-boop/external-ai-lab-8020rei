@@ -20,6 +20,8 @@ export interface Material {
   week: string | null
   estimated_time: string | null
   initial_score: number | null
+  initial_quality: number | null
+  initial_relevance: number | null
   file_url: string | null
   file_name: string | null
   file_type: string | null
@@ -39,8 +41,17 @@ export interface Vote {
   user_id: string
   quality_score: number
   relevance_score: number
+  comment: string | null
   created_at: string
   updated_at: string
+}
+
+export interface VoteReaction {
+  id: string
+  vote_id: string
+  user_id: string
+  reaction: 'like' | 'dislike'
+  created_at: string
 }
 
 export interface MaterialWithScores extends Material {
