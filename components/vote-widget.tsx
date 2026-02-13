@@ -8,12 +8,14 @@ interface VoteWidgetProps {
   existingVote: {
     quality_score: number
     relevance_score: number
+    comment?: string | null
   } | null
 }
 
 export default function VoteWidget({ materialId, existingVote }: VoteWidgetProps) {
   const [quality, setQuality] = useState(existingVote?.quality_score || 0)
   const [relevance, setRelevance] = useState(existingVote?.relevance_score || 0)
+  const [comment, setComment] = useState(existingVote?.comment || '')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +29,7 @@ export default function VoteWidget({ materialId, existingVote }: VoteWidgetProps
     setError(null)
     setSuccess(false)
 
-    const result = await submitVote(materialId, quality, relevance)
+    const result = await submitVote(materialId, quality, relevance, comment || undefined)
     if (result.error) {
       setError(result.error)
     } else {
@@ -64,11 +66,25 @@ export default function VoteWidget({ materialId, existingVote }: VoteWidgetProps
       </div>
 
       {/* Relevance rating */}
-      <div className="mb-5">
+      <div className="mb-4">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Relevance <span className="text-muted font-normal">— How useful for AI training?</span>
         </label>
         <StarRating value={relevance} onChange={setRelevance} />
+      </div>
+
+      {/* Comment (optional) */}
+      <div className="mb-5">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Comment <span className="text-muted font-normal">(optional)</span>
+        </label>
+        <textarea
+          value={comment}
+          onChange={e => setComment(e.target.value)}
+          placeholder="Share your thoughts about this material..."
+          className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+          rows={3}
+        />
       </div>
 
       <button

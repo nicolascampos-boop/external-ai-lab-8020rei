@@ -6,7 +6,8 @@ import { revalidatePath } from 'next/cache'
 export async function submitVote(
   materialId: string,
   qualityScore: number,
-  relevanceScore: number
+  relevanceScore: number,
+  comment?: string
 ) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -25,6 +26,7 @@ export async function submitVote(
         user_id: user.id,
         quality_score: qualityScore,
         relevance_score: relevanceScore,
+        comment: comment || null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'material_id,user_id' }

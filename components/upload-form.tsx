@@ -98,16 +98,20 @@ function parseRowsToMaterials(
 
       // Parse scores - prioritize quality + relevance, fallback to average score
       let initial_score: number | undefined
+      let initial_quality: number | undefined
+      let initial_relevance: number | undefined
 
       const qualityRaw = get('quality')
       const relevanceRaw = get('relevance')
       const scoreRaw = get('score')
 
-      // If both quality and relevance are provided, calculate average
+      // If both quality and relevance are provided, store them separately
       if (qualityRaw && relevanceRaw) {
         const quality = parseFloat(qualityRaw)
         const relevance = parseFloat(relevanceRaw)
         if (!isNaN(quality) && !isNaN(relevance) && quality >= 0 && quality <= 5 && relevance >= 0 && relevance <= 5) {
+          initial_quality = Math.round(quality * 10) / 10
+          initial_relevance = Math.round(relevance * 10) / 10
           initial_score = Math.round(((quality + relevance) / 2) * 10) / 10
         }
       }
@@ -126,6 +130,8 @@ function parseRowsToMaterials(
         content_type: get('content_type') || undefined,
         categories,
         initial_score,
+        initial_quality,
+        initial_relevance,
         week: normalizeWeek(get('week')) || undefined,
         estimated_time: get('estimated_time') || undefined,
       } as ParsedMaterial
