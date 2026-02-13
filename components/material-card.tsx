@@ -60,14 +60,14 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
       )}
       <Link
         href={materialLink}
-        className={`flex-1 block rounded-xl border p-6 hover:shadow-lg transition-all ${
+        className={`flex-1 block rounded-xl border p-4 md:p-6 hover:shadow-lg transition-all ${
           material.is_essential
             ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 hover:border-amber-400'
             : 'bg-card border-border hover:border-primary/30'
         }`}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
+        <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0 w-full">
             {/* Badges row with better spacing */}
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               {material.is_essential && (
@@ -116,8 +116,8 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
             )}
           </div>
 
-          {/* Score badge - clearer design */}
-          <div className="flex-shrink-0 text-center">
+          {/* Score badge - mobile horizontal, desktop vertical */}
+          <div className="flex sm:flex-col items-center gap-2 sm:gap-0 sm:flex-shrink-0 sm:text-center">
             <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold shadow-sm ${
               !displayScore
                 ? 'bg-gray-100 text-gray-400 border border-gray-200'
@@ -129,7 +129,7 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
             }`}>
               {displayScore || '—'}
             </div>
-            <p className="text-xs text-muted mt-1.5 font-medium">
+            <p className="text-xs text-muted sm:mt-1.5 font-medium">
               {scoreSource === 'community'
                 ? `${material.vote_count} ${material.vote_count === 1 ? 'review' : 'reviews'}`
                 : scoreSource === 'initial'
@@ -139,9 +139,9 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
           </div>
         </div>
 
-        {/* Footer with better spacing and clearer information */}
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-          <div className="flex items-center gap-4 text-xs text-gray-600">
+        {/* Footer with responsive layout */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 gap-2 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
             {material.estimated_time && (
               <span className="inline-flex items-center gap-1.5 font-medium">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -157,7 +157,7 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
               </>
             )}
           </div>
-          <span className="text-xs text-gray-500 font-medium">
+          <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
             {new Date(material.created_at).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',

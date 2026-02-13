@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import type { Profile } from '@/lib/supabase/types'
 
 const navItems = [
@@ -20,6 +21,7 @@ const adminItems = [
 export default function Sidebar({ profile }: { profile: Profile }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -32,68 +34,103 @@ export default function Sidebar({ profile }: { profile: Profile }) {
     : navItems
 
   return (
-    <aside className="w-64 bg-sidebar min-h-screen flex flex-col fixed left-0 top-0 bottom-0 overflow-y-auto">
-      {/* Header */}
-      <div className="p-5 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-white font-semibold text-sm">AI Training</h1>
-            <p className="text-gray-400 text-xs">Material Platform</p>
+    <>
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-sidebar rounded-lg text-white shadow-lg"
+        aria-label="Toggle menu"
+      >
+        {mobileMenuOpen ? (
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        ) : (
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        )}
+      </button>
+
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-40
+        w-64 bg-sidebar min-h-screen flex flex-col overflow-y-auto
+        transform transition-transform duration-200 ease-in-out lg:transform-none
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        {/* Header */}
+        <div className="p-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-white font-semibold text-sm">AI Training</h1>
+              <p className="text-gray-400 text-xs">Material Platform</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1">
-        {items.map((item) => {
-          const isActive = pathname.startsWith(item.href)
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                isActive
-                  ? 'bg-primary text-white'
-                  : 'text-gray-300 hover:bg-sidebar-hover hover:text-white'
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              {item.label}
-            </Link>
-          )
-        })}
-      </nav>
+        {/* Navigation */}
+        <nav className="flex-1 p-3 space-y-1">
+          {items.map((item) => {
+            const isActive = pathname.startsWith(item.href)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? 'bg-primary text-white'
+                    : 'text-gray-300 hover:bg-sidebar-hover hover:text-white'
+                }`}
+              >
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
 
-      {/* Profile / Sign Out */}
-      <div className="p-3 border-t border-white/10">
-        <Link
-          href="/admin"
-          className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-sidebar-hover transition-colors"
-        >
-          <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-white text-sm font-medium">
-            {profile.full_name?.charAt(0) || profile.email.charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-sm font-medium truncate">
-              {profile.full_name || profile.email}
-            </p>
-            <p className="text-gray-400 text-xs capitalize">{profile.role}</p>
-          </div>
-        </Link>
-        <button
-          onClick={handleSignOut}
-          className="mt-1 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-sidebar-hover hover:text-white transition-colors"
-        >
-          <SignOutIcon className="w-5 h-5" />
-          Sign Out
-        </button>
-      </div>
-    </aside>
+        {/* Profile / Sign Out */}
+        <div className="p-3 border-t border-white/10">
+          <Link
+            href="/admin"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-sidebar-hover transition-colors"
+          >
+            <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-white text-sm font-medium">
+              {profile.full_name?.charAt(0) || profile.email.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm font-medium truncate">
+                {profile.full_name || profile.email}
+              </p>
+              <p className="text-gray-400 text-xs capitalize">{profile.role}</p>
+            </div>
+          </Link>
+          <button
+            onClick={handleSignOut}
+            className="mt-1 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-sidebar-hover hover:text-white transition-colors"
+          >
+            <SignOutIcon className="w-5 h-5" />
+            Sign Out
+          </button>
+        </div>
+      </aside>
+    </>
   )
 }
 

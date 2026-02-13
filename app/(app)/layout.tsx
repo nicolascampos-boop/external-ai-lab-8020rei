@@ -46,7 +46,7 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen">
       <Sidebar profile={profile} />
-      <main className="ml-64 p-8 overflow-auto">
+      <main className="lg:ml-64 p-4 md:p-6 lg:p-8 overflow-auto">
         {children}
       </main>
     </div>
