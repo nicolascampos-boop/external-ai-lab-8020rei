@@ -18,6 +18,11 @@ export interface ParsedMaterial {
   estimated_time?: string
 }
 
+// Normalize URL for comparison (remove trailing slash, lowercase, trim)
+function normalizeUrl(url: string): string {
+  return url.trim().toLowerCase().replace(/\/$/, '')
+}
+
 export async function uploadMaterials(materials: ParsedMaterial[]) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -37,28 +42,35 @@ export async function uploadMaterials(materials: ParsedMaterial[]) {
     }
   }
 
-  // Check for duplicate URLs in the database
+  // Check for duplicate URLs in the database (with normalization)
   const urlsToCheck = materials
     .map(m => m.link?.trim())
     .filter((url): url is string => !!url)
 
   let existingUrls = new Set<string>()
   if (urlsToCheck.length > 0) {
+    // Get ALL existing links from database to check normalized versions
     const { data: existingMaterials } = await supabase
       .from('materials')
       .select('link')
-      .in('link', urlsToCheck)
+      .not('link', 'is', null)
 
     if (existingMaterials) {
-      existingUrls = new Set(existingMaterials.map(m => m.link).filter(Boolean))
+      // Normalize and store all existing URLs
+      existingUrls = new Set(
+        existingMaterials
+          .map(m => m.link)
+          .filter(Boolean)
+          .map(normalizeUrl)
+      )
     }
   }
 
-  // Prepare rows, filtering out duplicates
+  // Prepare rows, filtering out duplicates (using normalized comparison)
   const rows = materials
     .filter(m => {
-      // Skip if URL already exists
-      if (m.link && existingUrls.has(m.link.trim())) {
+      // Skip if URL already exists (after normalization)
+      if (m.link && existingUrls.has(normalizeUrl(m.link))) {
         return false
       }
       return true
