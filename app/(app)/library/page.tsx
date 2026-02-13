@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import MaterialCard from '@/components/material-card'
+import MaterialList from '@/components/material-list'
 import FilterBar from '@/components/filter-bar'
 import { CATEGORIES, CONTENT_TYPES } from '@/lib/supabase/types'
 
@@ -16,6 +16,18 @@ interface Props {
 export default async function LibraryPage({ searchParams }: Props) {
   const params = await searchParams
   const supabase = await createClient()
+
+  // Get current user role
+  const { data: { user } } = await supabase.auth.getUser()
+  let isAdmin = false
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    isAdmin = profile?.role === 'admin'
+  }
 
   let query = supabase.from('material_scores').select('*')
 
@@ -76,10 +88,8 @@ export default async function LibraryPage({ searchParams }: Props) {
       />
 
       {materials && materials.length > 0 ? (
-        <div className="space-y-3 mt-6">
-          {materials.map(material => (
-            <MaterialCard key={material.id} material={material} />
-          ))}
+        <div className="mt-6">
+          <MaterialList materials={materials} isAdmin={isAdmin} />
         </div>
       ) : (
         <div className="bg-card rounded-xl border border-border p-12 text-center mt-6">

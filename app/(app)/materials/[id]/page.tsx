@@ -58,7 +58,11 @@ export default async function MaterialDetailPage({ params }: Props) {
 
   const overallScore = material.vote_count > 0
     ? ((material.avg_quality + material.avg_relevance) / 2).toFixed(1)
-    : null
+    : material.initial_score
+      ? material.initial_score.toFixed(1)
+      : null
+
+  const scoreLabel = material.vote_count > 0 ? 'Overall Score' : material.initial_score ? 'Imported Score' : 'No Score Yet'
 
   return (
     <div className="max-w-4xl">
@@ -102,8 +106,31 @@ export default async function MaterialDetailPage({ params }: Props) {
               <p className="text-muted mt-3">{material.description}</p>
             )}
 
+            {/* Resource link - prominent */}
+            {material.link && (
+              <a
+                href={material.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-lg hover:bg-primary/10 transition-colors group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-primary group-hover:underline">Open Resource</p>
+                  <p className="text-xs text-muted truncate">{material.link}</p>
+                </div>
+                <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </a>
+            )}
+
             {/* Material details grid */}
-            <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className="flex flex-wrap gap-4 mt-4">
               {material.estimated_time && (
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <svg className="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -120,6 +147,14 @@ export default async function MaterialDetailPage({ params }: Props) {
                   <span>{material.week}</span>
                 </div>
               )}
+              {material.initial_score && material.vote_count === 0 && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <svg className="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                  <span>Imported score: {material.initial_score.toFixed(1)}/5</span>
+                </div>
+              )}
             </div>
 
             {/* Meta info */}
@@ -127,21 +162,6 @@ export default async function MaterialDetailPage({ params }: Props) {
               <span>Uploaded by {uploader?.full_name || uploader?.email || 'Unknown'}</span>
               <span>{new Date(material.created_at).toLocaleDateString()}</span>
             </div>
-
-            {/* Resource link button */}
-            {material.link && (
-              <a
-                href={material.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-                Open Resource
-              </a>
-            )}
           </div>
 
           {/* Reviews list */}
@@ -193,7 +213,7 @@ export default async function MaterialDetailPage({ params }: Props) {
             }`}>
               {overallScore || '—'}
             </div>
-            <p className="text-sm text-muted mt-3">Overall Score</p>
+            <p className="text-sm text-muted mt-3">{scoreLabel}</p>
             <div className="flex justify-center gap-6 mt-4 text-sm">
               <div>
                 <p className="font-semibold text-gray-900">

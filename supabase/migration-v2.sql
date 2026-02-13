@@ -9,6 +9,7 @@ ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS link text;
 ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS content_type text;
 ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS week text;
 ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS estimated_time text;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS initial_score numeric(3,1);
 
 -- 2. Make file-related columns nullable (materials are now parsed from rows, not stored as files)
 ALTER TABLE public.materials ALTER COLUMN file_url DROP NOT NULL;
@@ -37,5 +38,5 @@ LEFT JOIN public.votes v ON v.material_id = m.id
 GROUP BY m.id;
 
 -- ============================================
--- DONE! The view now includes link, content_type, week, estimated_time
+-- DONE! The view now includes link, content_type, week, estimated_time, initial_score
 -- ============================================

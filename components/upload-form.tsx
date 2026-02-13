@@ -4,15 +4,31 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { uploadMaterials, type ParsedMaterial } from '@/lib/actions/materials'
-import { CATEGORIES, CONTENT_TYPES } from '@/lib/supabase/types'
+import { CONTENT_TYPES } from '@/lib/supabase/types'
+
+// Fix encoding artifacts from files saved with mixed encodings
+function cleanText(val: unknown): string {
+  if (val == null) return ''
+  let str = String(val).trim()
+  // Fix common UTF-8 mojibake from Windows-1252 encoded files
+  str = str.replace(/â€"/g, '—')
+  str = str.replace(/â€"/g, '–')
+  str = str.replace(/â€™/g, '\u2019')
+  str = str.replace(/â€˜/g, '\u2018')
+  str = str.replace(/â€œ/g, '\u201C')
+  // Fix standalone â between numbers (usually an en-dash)
+  str = str.replace(/(\d)\s*â\s*(\d)/g, '$1–$2')
+  return str
+}
 
 // Material fields that can be mapped from file columns
 const MATERIAL_FIELDS = [
   { key: 'title', label: 'Name', required: true, keywords: ['name', 'title', 'resource', 'material'] },
-  { key: 'link', label: 'Link', required: false, keywords: ['link', 'url', 'href', 'website'] },
-  { key: 'description', label: 'Description', required: false, keywords: ['description', 'desc', 'small description', 'summary', 'about'] },
+  { key: 'link', label: 'Link', required: true, keywords: ['link', 'url', 'href', 'website'] },
+  { key: 'description', label: 'Description', required: true, keywords: ['description', 'desc', 'small description', 'summary', 'about'] },
   { key: 'content_type', label: 'Content Type', required: false, keywords: ['content type', 'type', 'format', 'content_type', 'contenttype'] },
-  { key: 'categories', label: 'Category', required: false, keywords: ['category', 'categories', 'topic', 'topics'] },
+  { key: 'categories', label: 'Category', required: true, keywords: ['category', 'categories', 'topic', 'topics'] },
+  { key: 'score', label: 'Score', required: false, keywords: ['score', 'rating', 'average', 'avg', 'quality'] },
   { key: 'week', label: 'Week', required: false, keywords: ['week', 'stage', 'course creation', 'module', 'phase'] },
   { key: 'estimated_time', label: 'Estimated Time', required: false, keywords: ['estimated time', 'time', 'duration', 'estimated_time', 'time investment'] },
 ] as const
@@ -43,35 +59,51 @@ function autoMapColumns(headers: string[]): Record<FieldKey, number | null> {
 function parseRowsToMaterials(
   rows: unknown[][],
   mapping: Record<FieldKey, number | null>
-): ParsedMaterial[] {
-  return rows
+): { valid: ParsedMaterial[]; skipped: number } {
+  let skipped = 0
+  const valid = rows
     .map(row => {
       const get = (key: FieldKey): string => {
         const idx = mapping[key]
         if (idx === null || idx === undefined) return ''
         const val = row[idx]
-        return val != null ? String(val).trim() : ''
+        return val != null ? cleanText(val) : ''
       }
 
       const title = get('title')
-      if (!title) return null
+      if (!title) { skipped++; return null }
 
+      const link = get('link')
+      const description = get('description')
       const categoryRaw = get('categories')
       const categories = categoryRaw
         ? categoryRaw.split(',').map(c => c.trim()).filter(Boolean)
         : []
 
+      // Parse score as number
+      const scoreRaw = get('score')
+      let initial_score: number | undefined
+      if (scoreRaw) {
+        const parsed = parseFloat(scoreRaw)
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 5) {
+          initial_score = Math.round(parsed * 10) / 10
+        }
+      }
+
       return {
         title,
-        link: get('link') || undefined,
-        description: get('description') || undefined,
+        link: link || undefined,
+        description: description || undefined,
         content_type: get('content_type') || undefined,
         categories,
+        initial_score,
         week: get('week') || undefined,
         estimated_time: get('estimated_time') || undefined,
       } as ParsedMaterial
     })
     .filter((m): m is ParsedMaterial => m !== null)
+
+  return { valid, skipped }
 }
 
 export default function UploadForm() {
@@ -89,6 +121,7 @@ export default function UploadForm() {
 
   // Preview
   const [materials, setMaterials] = useState<ParsedMaterial[]>([])
+  const [skippedRows, setSkippedRows] = useState(0)
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -126,9 +159,9 @@ export default function UploadForm() {
 
     try {
       const data = await f.arrayBuffer()
-      const workbook = XLSX.read(data, { type: 'array' })
+      const workbook = XLSX.read(data, { type: 'array', codepage: 65001 })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][]
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as unknown[][]
 
       if (rows.length < 2) {
         setError('File must have at least a header row and one data row.')
@@ -136,7 +169,7 @@ export default function UploadForm() {
       }
 
       const fileHeaders = (rows[0] as string[])
-        .map(h => (h != null ? String(h).trim() : ''))
+        .map(h => (h != null ? cleanText(h) : ''))
 
       // Filter out completely empty columns
       const nonEmptyIndices = fileHeaders
@@ -156,8 +189,9 @@ export default function UploadForm() {
       setMapping(autoMapping)
 
       // Generate preview
-      const parsed = parseRowsToMaterials(cleanRows, autoMapping)
-      setMaterials(parsed)
+      const { valid, skipped } = parseRowsToMaterials(cleanRows, autoMapping)
+      setMaterials(valid)
+      setSkippedRows(skipped)
     } catch {
       setError('Failed to parse file. Make sure it is a valid CSV or Excel file.')
     }
@@ -167,8 +201,9 @@ export default function UploadForm() {
     if (!mapping) return
     const newMapping = { ...mapping, [field]: columnIndex }
     setMapping(newMapping)
-    const parsed = parseRowsToMaterials(dataRows, newMapping)
-    setMaterials(parsed)
+    const { valid, skipped } = parseRowsToMaterials(dataRows, newMapping)
+    setMaterials(valid)
+    setSkippedRows(skipped)
   }
 
   async function handleSubmit() {
@@ -188,18 +223,24 @@ export default function UploadForm() {
     } else if (result?.success) {
       setSuccess({ count: result.count })
       setLoading(false)
-      // Reset form
       setFile(null)
       setHeaders([])
       setDataRows([])
       setMapping(null)
       setMaterials([])
-      // Navigate to library after a short delay
+      setSkippedRows(0)
       setTimeout(() => router.push('/library'), 2000)
     }
   }
 
   const fileSize = file ? (file.size / (1024 * 1024)).toFixed(1) + ' MB' : ''
+
+  // Check which required fields are unmapped
+  const unmappedRequired = mapping
+    ? MATERIAL_FIELDS.filter(f => f.required && mapping[f.key] === null).map(f => f.label)
+    : []
+
+  const canSubmit = materials.length > 0 && unmappedRequired.length === 0
 
   const contentTypeColor: Record<string, string> = {
     'Video': 'bg-rose-100 text-rose-700',
@@ -281,7 +322,7 @@ export default function UploadForm() {
         <div>
           <h3 className="text-sm font-semibold text-gray-700 mb-2">Step 2: Map your columns</h3>
           <p className="text-xs text-muted mb-3">
-            Match each material field to a column in your file. We auto-detected some mappings for you.
+            Fields marked with <span className="text-red-500">*</span> are required. Rows missing required data will be skipped.
           </p>
           <div className="bg-card rounded-xl border border-border divide-y divide-border">
             {MATERIAL_FIELDS.map(field => (
@@ -299,7 +340,11 @@ export default function UploadForm() {
                   value={mapping[field.key] ?? ''}
                   onChange={e => updateMapping(field.key, e.target.value === '' ? null : Number(e.target.value))}
                   className={`flex-1 px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary ${
-                    mapping[field.key] !== null ? 'border-green-300 bg-green-50' : 'border-border'
+                    mapping[field.key] !== null
+                      ? 'border-green-300 bg-green-50'
+                      : field.required
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-border'
                   }`}
                 >
                   <option value="">-- Skip --</option>
@@ -310,6 +355,12 @@ export default function UploadForm() {
               </div>
             ))}
           </div>
+
+          {unmappedRequired.length > 0 && (
+            <p className="text-xs text-red-500 mt-2">
+              Please map required fields: {unmappedRequired.join(', ')}
+            </p>
+          )}
         </div>
       )}
 
@@ -317,7 +368,12 @@ export default function UploadForm() {
       {materials.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
-            Step 3: Preview ({materials.length} materials found)
+            Step 3: Preview ({materials.length} materials ready)
+            {skippedRows > 0 && (
+              <span className="text-amber-600 font-normal ml-2">
+                ({skippedRows} rows skipped — missing name)
+              </span>
+            )}
           </h3>
           <div className="space-y-2">
             {materials.slice(0, 5).map((m, i) => (
@@ -340,6 +396,15 @@ export default function UploadForm() {
                       {m.week && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700">
                           {m.week}
+                        </span>
+                      )}
+                      {m.initial_score !== undefined && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
+                          m.initial_score >= 4 ? 'bg-green-100 text-green-700' :
+                          m.initial_score >= 3 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {m.initial_score.toFixed(1)}
                         </span>
                       )}
                     </div>
@@ -369,22 +434,24 @@ export default function UploadForm() {
       )}
 
       {/* Submit */}
-      {materials.length > 0 && (
+      {headers.length > 0 && (
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={loading || mapping?.title === null}
+          disabled={loading || !canSubmit}
           className="w-full py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading
             ? 'Uploading...'
-            : `Upload ${materials.length} Material${materials.length === 1 ? '' : 's'}`}
+            : materials.length > 0
+              ? `Upload ${materials.length} Material${materials.length === 1 ? '' : 's'}`
+              : 'No valid materials found'}
         </button>
       )}
 
-      {mapping?.title === null && headers.length > 0 && (
+      {!canSubmit && headers.length > 0 && unmappedRequired.length > 0 && (
         <p className="text-xs text-center text-red-500">
-          Please map the &quot;Name&quot; column — it is required for each material.
+          Map all required fields ({unmappedRequired.join(', ')}) to enable upload.
         </p>
       )}
 
@@ -400,8 +467,10 @@ export default function UploadForm() {
           </ol>
           <div className="mt-3 pt-3 border-t border-border">
             <p className="text-xs text-muted">
-              <span className="font-medium text-gray-600">Expected columns:</span>{' '}
-              Name, Link, Description, Content Type ({CONTENT_TYPES.join(', ')}), Category, Week, Estimated Time
+              <span className="font-medium text-gray-600">Required:</span> Name, Link, Description, Category
+            </p>
+            <p className="text-xs text-muted mt-1">
+              <span className="font-medium text-gray-600">Optional:</span> Content Type ({CONTENT_TYPES.join(', ')}), Score, Week, Estimated Time
             </p>
           </div>
         </div>

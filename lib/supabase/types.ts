@@ -19,6 +19,7 @@ export interface Material {
   categories: string[]
   week: string | null
   estimated_time: string | null
+  initial_score: number | null
   file_url: string | null
   file_name: string | null
   file_type: string | null

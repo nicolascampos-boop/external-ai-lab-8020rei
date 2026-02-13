@@ -10,6 +10,7 @@ export interface ParsedMaterial {
   description?: string
   content_type?: string
   categories: string[]
+  initial_score?: number
   week?: string
   estimated_time?: string
 }
@@ -38,7 +39,8 @@ export async function uploadMaterials(materials: ParsedMaterial[]) {
     link: m.link?.trim() || null,
     description: m.description?.trim() || null,
     content_type: m.content_type?.trim() || null,
-    categories: m.categories.length > 0 ? m.categories : ['AI Fundamentals'],
+    categories: m.categories.length > 0 ? m.categories : [],
+    initial_score: m.initial_score ?? null,
     week: m.week?.trim() || null,
     estimated_time: m.estimated_time?.trim() || null,
     uploaded_by: user.id,
@@ -72,7 +74,6 @@ export async function deleteMaterial(materialId: string) {
 
   if (!user) return { error: 'Not authenticated' }
 
-  // Check if admin
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -91,4 +92,37 @@ export async function deleteMaterial(materialId: string) {
   if (error) return { error: error.message }
 
   redirect('/library')
+}
+
+export async function bulkDeleteMaterials(materialIds: string[]) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'Not authenticated' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.role !== 'admin') {
+    return { error: 'Admin access required' }
+  }
+
+  if (!materialIds || materialIds.length === 0) {
+    return { error: 'No materials selected.' }
+  }
+
+  const { error } = await supabase
+    .from('materials')
+    .delete()
+    .in('id', materialIds)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/library')
+  revalidatePath('/dashboard')
+
+  return { success: true, count: materialIds.length }
 }
