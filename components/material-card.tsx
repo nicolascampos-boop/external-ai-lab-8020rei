@@ -60,65 +60,65 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
       )}
       <Link
         href={materialLink}
-        className={`flex-1 block rounded-xl border p-4 md:p-6 hover:shadow-lg transition-all ${
+        className={`flex-1 min-w-0 block rounded-xl border p-3 md:p-6 hover:shadow-lg transition-all ${
           material.is_essential
             ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 hover:border-amber-400'
             : 'bg-card border-border hover:border-primary/30'
         }`}
       >
         <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3 sm:gap-4">
-          <div className="flex-1 min-w-0 w-full">
+          <div className="flex-1 min-w-0">
             {/* Badges row with better spacing */}
-            <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <div className="flex items-center gap-1.5 md:gap-2 mb-2 md:mb-3 flex-wrap">
               {material.is_essential && (
-                <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-sm">
+                <span className="inline-flex items-center px-2 md:px-3 py-0.5 md:py-1 rounded-md text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-sm flex-shrink-0">
                   💎 Essential
                 </span>
               )}
               {material.content_type && (
-                <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-medium ${
+                <span className={`inline-flex items-center px-2 md:px-3 py-0.5 md:py-1 rounded-md text-xs font-medium flex-shrink-0 ${
                   CONTENT_TYPE_COLORS[material.content_type] || 'bg-gray-100 text-gray-600'
                 }`}>
                   {material.content_type}
                 </span>
               )}
-              {categories.slice(0, 2).map(cat => (
-                <span key={cat} className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
+              {categories.slice(0, 1).map(cat => (
+                <span key={cat} className="inline-flex items-center px-2 md:px-3 py-0.5 md:py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200 flex-shrink-0 truncate max-w-[120px] md:max-w-none">
                   {cat}
                 </span>
               ))}
-              {categories.length > 2 && (
-                <span className="text-xs text-muted font-medium">+{categories.length - 2} more</span>
+              {categories.length > 1 && (
+                <span className="text-xs text-muted font-medium flex-shrink-0">+{categories.length - 1} more</span>
               )}
               {material.week && (
-                <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-violet-100 text-violet-700 border border-violet-200">
+                <span className="inline-flex items-center px-2 md:px-3 py-0.5 md:py-1 rounded-md text-xs font-medium bg-violet-100 text-violet-700 border border-violet-200 flex-shrink-0">
                   📅 {material.week}
                 </span>
               )}
             </div>
 
-            {/* Title with better spacing */}
-            <h3 className="font-semibold text-gray-900 text-lg mb-2">{material.title}</h3>
+            {/* Title with truncation for mobile */}
+            <h3 className="font-semibold text-gray-900 text-base md:text-lg mb-2 line-clamp-2">{material.title}</h3>
 
             {/* Description with better line height */}
             {material.description && (
-              <p className="text-muted text-sm leading-relaxed line-clamp-2 mb-3">{material.description}</p>
+              <p className="text-muted text-xs md:text-sm leading-relaxed line-clamp-2 mb-2 md:mb-3">{material.description}</p>
             )}
 
-            {/* Link preview with icon */}
+            {/* Link preview with icon - more compact on mobile */}
             {material.link && (
-              <div className="flex items-center gap-2 text-xs text-primary bg-blue-50 px-3 py-2 rounded-md border border-blue-100">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex items-center gap-1.5 md:gap-2 text-xs text-primary bg-blue-50 px-2 md:px-3 py-1.5 md:py-2 rounded-md border border-blue-100 min-w-0">
+                <svg className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                <span className="truncate font-medium">{material.link}</span>
+                <span className="truncate font-medium min-w-0">{material.link}</span>
               </div>
             )}
           </div>
 
-          {/* Score badge - mobile horizontal, desktop vertical */}
-          <div className="flex sm:flex-col items-center gap-2 sm:gap-0 sm:flex-shrink-0 sm:text-center">
-            <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold shadow-sm ${
+          {/* Score badge - more compact on mobile */}
+          <div className="flex sm:flex-col items-center gap-2 sm:gap-0 flex-shrink-0 sm:text-center">
+            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl flex items-center justify-center text-lg md:text-xl font-bold shadow-sm ${
               !displayScore
                 ? 'bg-gray-100 text-gray-400 border border-gray-200'
                 : Number(displayScore) >= 4
@@ -140,11 +140,11 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
         </div>
 
         {/* Footer with responsive layout */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 gap-2 sm:gap-4">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-2 md:mt-4 pt-2 md:pt-4 border-t border-gray-200 gap-1.5 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-x-2 md:gap-x-3 gap-y-1 text-xs text-gray-600">
             {material.estimated_time && (
-              <span className="inline-flex items-center gap-1.5 font-medium">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span className="inline-flex items-center gap-1 font-medium">
+                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {material.estimated_time}
@@ -152,12 +152,12 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
             )}
             {material.vote_count > 0 && (
               <>
-                <span className="font-medium">Quality: <span className="text-gray-900">{material.avg_quality.toFixed(1)}</span></span>
-                <span className="font-medium">Relevance: <span className="text-gray-900">{material.avg_relevance.toFixed(1)}</span></span>
+                <span className="font-medium text-[11px] md:text-xs">Q: <span className="text-gray-900">{material.avg_quality.toFixed(1)}</span></span>
+                <span className="font-medium text-[11px] md:text-xs">R: <span className="text-gray-900">{material.avg_relevance.toFixed(1)}</span></span>
               </>
             )}
           </div>
-          <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+          <span className="text-[11px] md:text-xs text-gray-500 font-medium whitespace-nowrap">
             {new Date(material.created_at).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
