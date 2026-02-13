@@ -36,19 +36,51 @@ export async function uploadMaterials(materials: ParsedMaterial[]) {
     }
   }
 
-  const rows = materials.map(m => ({
-    title: m.title.trim(),
-    link: m.link?.trim() || null,
-    description: m.description?.trim() || null,
-    content_type: m.content_type?.trim() || null,
-    categories: m.categories.length > 0 ? m.categories : [],
-    initial_score: m.initial_score ?? null,
-    initial_quality: m.initial_quality ?? null,
-    initial_relevance: m.initial_relevance ?? null,
-    week: m.week?.trim() || null,
-    estimated_time: m.estimated_time?.trim() || null,
-    uploaded_by: user.id,
-  }))
+  // Check for duplicate URLs in the database
+  const urlsToCheck = materials
+    .map(m => m.link?.trim())
+    .filter((url): url is string => !!url)
+
+  let existingUrls = new Set<string>()
+  if (urlsToCheck.length > 0) {
+    const { data: existingMaterials } = await supabase
+      .from('materials')
+      .select('link')
+      .in('link', urlsToCheck)
+
+    if (existingMaterials) {
+      existingUrls = new Set(existingMaterials.map(m => m.link).filter(Boolean))
+    }
+  }
+
+  // Prepare rows, filtering out duplicates
+  const rows = materials
+    .filter(m => {
+      // Skip if URL already exists
+      if (m.link && existingUrls.has(m.link.trim())) {
+        return false
+      }
+      return true
+    })
+    .map(m => ({
+      title: m.title.trim(),
+      link: m.link?.trim() || null,
+      description: m.description?.trim() || null,
+      content_type: m.content_type?.trim() || null,
+      categories: m.categories.length > 0 ? m.categories : [],
+      initial_score: m.initial_score ?? null,
+      initial_quality: m.initial_quality ?? null,
+      initial_relevance: m.initial_relevance ?? null,
+      week: m.week?.trim() || null,
+      estimated_time: m.estimated_time?.trim() || null,
+      uploaded_by: user.id,
+    }))
+
+  const duplicateCount = materials.length - rows.length
+
+  if (rows.length === 0) {
+    return { error: `All ${materials.length} materials were duplicates (URLs already exist in the database).` }
+  }
 
   // Batch insert in groups of 50
   const batchSize = 50
@@ -69,7 +101,14 @@ export async function uploadMaterials(materials: ParsedMaterial[]) {
   revalidatePath('/library')
   revalidatePath('/dashboard')
 
-  return { success: true, count: totalInserted }
+  return {
+    success: true,
+    count: totalInserted,
+    duplicates: duplicateCount,
+    message: duplicateCount > 0
+      ? `Uploaded ${totalInserted} materials. Skipped ${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''} (URL already exists).`
+      : undefined
+  }
 }
 
 export async function deleteMaterial(materialId: string) {

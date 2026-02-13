@@ -147,7 +147,7 @@ export default function UploadForm() {
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState<{ count: number } | null>(null)
+  const [success, setSuccess] = useState<{ count: number; duplicates?: number; message?: string } | null>(null)
 
   // Parsed file data
   const [headers, setHeaders] = useState<string[]>([])
@@ -256,7 +256,11 @@ export default function UploadForm() {
       setError(result.error)
       setLoading(false)
     } else if (result?.success) {
-      setSuccess({ count: result.count })
+      setSuccess({
+        count: result.count,
+        duplicates: result.duplicates,
+        message: result.message
+      })
       setLoading(false)
       setFile(null)
       setHeaders([])
@@ -298,7 +302,12 @@ export default function UploadForm() {
 
       {success && (
         <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
-          <p className="font-medium">Successfully uploaded {success.count} materials!</p>
+          <p className="font-medium">Successfully uploaded {success.count} material{success.count === 1 ? '' : 's'}!</p>
+          {success.duplicates && success.duplicates > 0 && (
+            <p className="text-sm mt-1 text-amber-600">
+              ⚠️ {success.duplicates} duplicate{success.duplicates === 1 ? '' : 's'} skipped (URL already exists)
+            </p>
+          )}
           <p className="text-sm mt-1">Redirecting to library...</p>
         </div>
       )}
