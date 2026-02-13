@@ -42,7 +42,9 @@ const MATERIAL_FIELDS = [
   { key: 'description', label: 'Description', required: true, keywords: ['description', 'desc', 'small description', 'summary', 'about'] },
   { key: 'content_type', label: 'Content Type', required: false, keywords: ['content type', 'type', 'format', 'content_type', 'contenttype'] },
   { key: 'categories', label: 'Category', required: true, keywords: ['category', 'categories', 'topic', 'topics'] },
-  { key: 'score', label: 'Score', required: false, keywords: ['score', 'rating', 'average', 'avg', 'quality'] },
+  { key: 'quality', label: 'Quality Score', required: false, keywords: ['quality', 'quality score'] },
+  { key: 'relevance', label: 'Relevance Score', required: false, keywords: ['relevance', 'relevance score'] },
+  { key: 'score', label: 'Average Score', required: false, keywords: ['score', 'rating', 'average', 'avg', 'average score', 'imported score', 'total score'] },
   { key: 'week', label: 'Week', required: false, keywords: ['week', 'stage', 'course creation', 'module', 'phase'] },
   { key: 'estimated_time', label: 'Estimated Time', required: false, keywords: ['estimated time', 'time', 'duration', 'estimated_time', 'time investment'] },
 ] as const
@@ -94,10 +96,23 @@ function parseRowsToMaterials(
         ? categoryRaw.split(',').map(c => c.trim()).filter(Boolean)
         : []
 
-      // Parse score as number
-      const scoreRaw = get('score')
+      // Parse scores - prioritize quality + relevance, fallback to average score
       let initial_score: number | undefined
-      if (scoreRaw) {
+
+      const qualityRaw = get('quality')
+      const relevanceRaw = get('relevance')
+      const scoreRaw = get('score')
+
+      // If both quality and relevance are provided, calculate average
+      if (qualityRaw && relevanceRaw) {
+        const quality = parseFloat(qualityRaw)
+        const relevance = parseFloat(relevanceRaw)
+        if (!isNaN(quality) && !isNaN(relevance) && quality >= 0 && quality <= 5 && relevance >= 0 && relevance <= 5) {
+          initial_score = Math.round(((quality + relevance) / 2) * 10) / 10
+        }
+      }
+      // Otherwise, use the average score column if provided
+      else if (scoreRaw) {
         const parsed = parseFloat(scoreRaw)
         if (!isNaN(parsed) && parsed >= 0 && parsed <= 5) {
           initial_score = Math.round(parsed * 10) / 10
@@ -484,7 +499,7 @@ export default function UploadForm() {
               <span className="font-medium text-gray-600">Required:</span> Name, Link, Description, Category
             </p>
             <p className="text-xs text-muted mt-1">
-              <span className="font-medium text-gray-600">Optional:</span> Content Type ({CONTENT_TYPES.join(', ')}), Score, Week, Estimated Time
+              <span className="font-medium text-gray-600">Optional:</span> Content Type ({CONTENT_TYPES.join(', ')}), Quality Score + Relevance Score (or Average Score), Week, Estimated Time
             </p>
           </div>
         </div>
