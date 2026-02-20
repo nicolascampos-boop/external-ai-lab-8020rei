@@ -102,19 +102,23 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
         .order('submitted_at', { ascending: false })
     : { data: null }
 
-  // Tier grouping
+  // Tier grouping — 4 tiers: must_read (top priority) → core → optional → reference
+  const mustReadMats = (materials ?? []).filter(m =>
+    m.material_tier === 'must_read' || m.material_tier === 'must-read'
+  )
   const coreMats = (materials ?? []).filter(m => m.material_tier === 'core')
   const optionalMats = (materials ?? []).filter(m => m.material_tier === 'optional')
   const referenceMats = (materials ?? []).filter(m => m.material_tier === 'reference')
 
-  // Progress: core materials (each = 1 pt) + deliverable (= 1 pt)
-  const coreTotal = coreMats.length
-  const coreReviewed = coreMats.filter(m => userReviewedIds.includes(m.id)).length
+  // Progress: must_read + core materials (each = 1 pt) + deliverable (= 1 pt)
+  const requiredMats = [...mustReadMats, ...coreMats]
+  const requiredTotal = requiredMats.length
+  const requiredReviewed = requiredMats.filter(m => userReviewedIds.includes(m.id)).length
   const hasDeliverable = !!userDeliverable
-  const totalPoints = coreTotal + 1  // +1 for deliverable
-  const earnedPoints = coreReviewed + (hasDeliverable ? 1 : 0)
+  const totalPoints = requiredTotal + 1  // +1 for deliverable
+  const earnedPoints = requiredReviewed + (hasDeliverable ? 1 : 0)
   const progressPct = totalPoints > 1 ? Math.round((earnedPoints / totalPoints) * 100) : 0
-  const weekComplete = coreTotal > 0 && earnedPoints === totalPoints
+  const weekComplete = requiredTotal > 0 && earnedPoints === totalPoints
 
   // Week header — prefer DB values, fall back to constants
   const weekTitle = weekContent?.title || currentWeek
@@ -186,12 +190,12 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
             )}
             <p className="text-xs text-muted mt-1">
               {materials && materials.length > 0
-                ? `${materials.length} ${materials.length === 1 ? 'material' : 'materials'}${coreTotal > 0 ? ` • ${coreTotal} core` : ''}`
+                ? `${materials.length} ${materials.length === 1 ? 'material' : 'materials'}${requiredTotal > 0 ? ` • ${requiredTotal} required` : ''}`
                 : 'No materials for this week yet'}
             </p>
 
-            {/* Progress bar: core reviews + deliverable */}
-            {coreTotal > 0 && (
+            {/* Progress bar: must read + core reviews + deliverable */}
+            {requiredTotal > 0 && (
               <div className="mt-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-medium text-gray-700">Week progress</span>
@@ -209,7 +213,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                 </div>
                 <div className="flex items-center gap-3 mt-1.5">
                   <span className="text-xs text-gray-500">
-                    {coreReviewed}/{coreTotal} core reviewed
+                    {requiredReviewed}/{requiredTotal} required reviewed
                   </span>
                   <span className="text-gray-300">·</span>
                   <span className={`text-xs font-medium ${hasDeliverable ? 'text-green-600' : 'text-gray-400'}`}>
@@ -219,9 +223,9 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                 {weekComplete && (
                   <p className="text-xs text-green-600 font-medium mt-1">✓ Week complete!</p>
                 )}
-                {!weekComplete && coreReviewed === coreTotal && coreTotal > 0 && !hasDeliverable && (
+                {!weekComplete && requiredReviewed === requiredTotal && requiredTotal > 0 && !hasDeliverable && (
                   <p className="text-xs text-amber-600 font-medium mt-1">
-                    All core reviewed — submit your deliverable to complete this week →
+                    All required materials reviewed — submit your deliverable to complete this week →
                   </p>
                 )}
               </div>
@@ -281,11 +285,34 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
         <div>
           {materials && materials.length > 0 ? (
             <div>
-              {coreMats.length > 0 && (
+              {/* Must Read — highest priority */}
+              {mustReadMats.length > 0 && (
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
-                      💎 Core — {coreMats.length} {coreMats.length === 1 ? 'material' : 'materials'}
+                      💎 Must Read — {mustReadMats.length} {mustReadMats.length === 1 ? 'material' : 'materials'}
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {mustReadMats.map(material => (
+                      <MaterialCard
+                        key={material.id}
+                        material={material}
+                        from="weekly"
+                        week={currentWeek}
+                        isReviewed={userReviewedIds.includes(material.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Core — assigned materials for the week */}
+              {coreMats.length > 0 && (
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
+                      ⭐ Core — {coreMats.length} {coreMats.length === 1 ? 'material' : 'materials'}
                     </span>
                   </div>
                   <div className="space-y-3">
@@ -302,15 +329,14 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                 </div>
               )}
 
+              {/* Optional — supplementary materials */}
               {optionalMats.length > 0 && (
                 <div className="mb-6">
-                  {coreMats.length > 0 && (
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-sm font-medium text-gray-500 bg-gray-50 border border-gray-200 px-3 py-1 rounded-full">
-                        Optional — {optionalMats.length} {optionalMats.length === 1 ? 'material' : 'materials'}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-gray-500 bg-gray-50 border border-gray-200 px-3 py-1 rounded-full">
+                      Optional — {optionalMats.length} {optionalMats.length === 1 ? 'material' : 'materials'}
+                    </span>
+                  </div>
                   <div className="space-y-3">
                     {optionalMats.map(material => (
                       <MaterialCard
@@ -325,6 +351,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                 </div>
               )}
 
+              {/* Reference materials */}
               {referenceMats.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-3">
