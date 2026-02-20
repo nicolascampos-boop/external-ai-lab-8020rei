@@ -102,13 +102,29 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
         .order('submitted_at', { ascending: false })
     : { data: null }
 
+  // Helper to normalize tier values for comparison (case-insensitive, space-insensitive)
+  const normalizeTier = (tier: string | null | undefined): string => {
+    if (!tier) return ''
+    return tier.toLowerCase().replace(/[\s_-]+/g, '')  // "MUST READ" → "mustread"
+  }
+
   // Tier grouping — 4 tiers: must_read (top priority) → core → optional → reference
-  const mustReadMats = (materials ?? []).filter(m =>
-    m.material_tier === 'must_read' || m.material_tier === 'must-read'
-  )
-  const coreMats = (materials ?? []).filter(m => m.material_tier === 'core')
-  const optionalMats = (materials ?? []).filter(m => m.material_tier === 'optional')
-  const referenceMats = (materials ?? []).filter(m => m.material_tier === 'reference')
+  const mustReadMats = (materials ?? []).filter(m => {
+    const normalized = normalizeTier(m.material_tier as string)
+    return normalized === 'mustread'
+  })
+  const coreMats = (materials ?? []).filter(m => {
+    const normalized = normalizeTier(m.material_tier as string)
+    return normalized === 'core'
+  })
+  const optionalMats = (materials ?? []).filter(m => {
+    const normalized = normalizeTier(m.material_tier as string)
+    return normalized === 'optional'
+  })
+  const referenceMats = (materials ?? []).filter(m => {
+    const normalized = normalizeTier(m.material_tier as string)
+    return normalized === 'reference'
+  })
 
   // Progress: must_read + core materials (each = 1 pt) + deliverable (= 1 pt)
   const requiredMats = [...mustReadMats, ...coreMats]

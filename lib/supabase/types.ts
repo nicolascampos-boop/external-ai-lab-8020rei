@@ -1,6 +1,7 @@
 export type UserRole = 'admin' | 'user'
 
-export type MaterialTier = 'core' | 'optional' | 'reference'
+// Material tier can be in various formats from database (case-insensitive, with/without spaces)
+export type MaterialTier = string  // 'MUST READ' | 'must_read' | 'CORE' | 'core' | 'Optional' | 'optional' | 'Reference' | 'reference'
 
 export interface Profile {
   id: string
