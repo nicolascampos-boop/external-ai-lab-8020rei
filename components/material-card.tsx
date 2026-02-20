@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { memo } from 'react'
 import type { MaterialWithScores } from '@/lib/supabase/types'
 
 const CONTENT_TYPE_COLORS: Record<string, string> = {
@@ -22,7 +23,7 @@ interface MaterialCardProps {
   isReviewed?: boolean
 }
 
-export default function MaterialCard({ material, selectable, selected, onToggle, from, week, isReviewed }: MaterialCardProps) {
+function MaterialCard({ material, selectable, selected, onToggle, from, week, isReviewed }: MaterialCardProps) {
   // Use voting score if votes exist, otherwise fall back to initial_score
   const displayScore = material.vote_count > 0
     ? ((material.avg_quality + material.avg_relevance) / 2).toFixed(1)
@@ -192,3 +193,5 @@ export default function MaterialCard({ material, selectable, selected, onToggle,
     </div>
   )
 }
+
+export default memo(MaterialCard)

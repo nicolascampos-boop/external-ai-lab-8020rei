@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import MaterialCard from '@/components/material-card'
 import { bulkDeleteMaterials } from '@/lib/actions/materials'
@@ -19,30 +19,30 @@ export default function MaterialList({ materials, isAdmin, userReviewedIds }: Ma
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  function toggleSelect(id: string) {
+  const toggleSelect = useCallback((id: string) => {
     setSelected(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-  }
+  }, [])
 
-  function toggleAll() {
+  const toggleAll = useCallback(() => {
     if (selected.size === materials.length) {
       setSelected(new Set())
     } else {
       setSelected(new Set(materials.map(m => m.id)))
     }
-  }
+  }, [selected.size, materials])
 
-  function exitSelectMode() {
+  const exitSelectMode = useCallback(() => {
     setSelectMode(false)
     setSelected(new Set())
     setError(null)
-  }
+  }, [])
 
-  async function handleBulkDelete() {
+  const handleBulkDelete = useCallback(async () => {
     if (selected.size === 0) return
 
     const confirmed = window.confirm(
@@ -64,7 +64,7 @@ export default function MaterialList({ materials, isAdmin, userReviewedIds }: Ma
       setLoading(false)
       router.refresh()
     }
-  }
+  }, [selected, router])
 
   return (
     <div>

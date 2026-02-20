@@ -70,6 +70,8 @@ export interface MaterialWithScores extends Material {
 
 export interface WeekContent {
   week: string
+  title: string | null
+  description: string | null
   objectives: string | null
   homework: string | null
   deliverable_prompt: string | null

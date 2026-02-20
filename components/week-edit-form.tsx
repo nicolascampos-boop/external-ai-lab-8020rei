@@ -6,14 +6,25 @@ import { updateWeekContent } from '@/lib/actions/week-content'
 
 interface Props {
   week: string
+  initialTitle: string
+  initialDescription: string
   initialObjectives: string
   initialHomework: string
   initialDeliverablePrompt: string
 }
 
-export default function WeekEditForm({ week, initialObjectives, initialHomework, initialDeliverablePrompt }: Props) {
+export default function WeekEditForm({
+  week,
+  initialTitle,
+  initialDescription,
+  initialObjectives,
+  initialHomework,
+  initialDeliverablePrompt,
+}: Props) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(initialTitle)
+  const [description, setDescription] = useState(initialDescription)
   const [objectives, setObjectives] = useState(initialObjectives)
   const [homework, setHomework] = useState(initialHomework)
   const [deliverablePrompt, setDeliverablePrompt] = useState(initialDeliverablePrompt)
@@ -23,6 +34,8 @@ export default function WeekEditForm({ week, initialObjectives, initialHomework,
   function handleSave() {
     startTransition(async () => {
       const result = await updateWeekContent(week, {
+        title: title.trim() || undefined,
+        description: description.trim() || undefined,
         objectives,
         homework,
         deliverable_prompt: deliverablePrompt,
@@ -54,6 +67,28 @@ export default function WeekEditForm({ week, initialObjectives, initialHomework,
       {editing ? (
         <div className="space-y-3">
           {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
+
+          <div>
+            <label className="block text-xs font-medium text-blue-800 mb-1">📌 Week Title</label>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder={week}
+              className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-blue-800 mb-1">📝 Description / Subtitle</label>
+            <input
+              type="text"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="e.g. AI Foundations & Strategic Thinking"
+              className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+            />
+          </div>
 
           <div>
             <label className="block text-xs font-medium text-blue-800 mb-1">🎯 Learning Objectives</label>
@@ -106,7 +141,7 @@ export default function WeekEditForm({ week, initialObjectives, initialHomework,
         </div>
       ) : (
         <p className="text-xs text-blue-700">
-          Click &quot;Edit Week&quot; to set objectives, homework, and deliverable prompt for this week.
+          Click &quot;Edit Week&quot; to set title, description, objectives, homework, and deliverable prompt for this week.
         </p>
       )}
     </div>

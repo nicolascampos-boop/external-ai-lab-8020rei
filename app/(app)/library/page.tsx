@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import MaterialList from '@/components/material-list'
 import FilterBar from '@/components/filter-bar'
@@ -138,6 +139,9 @@ export default async function LibraryPage({ searchParams }: Props) {
     default:
       query = query.order('created_at', { ascending: false })
   }
+
+  // Add limit for better performance
+  query = query.limit(200)
 
   const { data: allMaterials } = await query
 

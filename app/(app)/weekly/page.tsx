@@ -18,8 +18,10 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
   const currentTab = params.tab || 'resources'
   const supabase = await createClient()
 
-  // Get current user role + reviewed IDs
+  // Round 1: auth (required by all downstream queries)
   const { data: { user } } = await supabase.auth.getUser()
+
+  // Round 2: profile + user vote IDs (parallel, both depend only on user)
   let isAdmin = false
   let userReviewedIds: string[] = []
   if (user) {
@@ -31,34 +33,51 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
     userReviewedIds = (userVotes ?? []).map(v => v.material_id)
   }
 
-  // Get materials for the selected week, sorted by tier then relevance
-  // material_tier: 'core' < 'optional' < 'reference' alphabetically = Core first
-  const { data: materials } = await supabase
-    .from('material_scores')
-    .select('*')
-    .eq('week', currentWeek)
-    .order('material_tier', { ascending: true })
-    .order('avg_relevance', { ascending: false, nullsFirst: false })
-    .order('avg_overall', { ascending: false, nullsFirst: false })
+  // Round 3: all independent data for the selected week (parallel)
+  // Replaces sequential queries with parallel ones
+  const [
+    { data: materials },
+    { data: weekContent },
+    userDeliverableResult,
+    { data: allMaterialWeeks },
+  ] = await Promise.all([
+    supabase
+      .from('material_scores')
+      .select('*')
+      .eq('week', currentWeek)
+      .order('material_tier', { ascending: true })
+      .order('avg_relevance', { ascending: false, nullsFirst: false })
+      .order('avg_overall', { ascending: false, nullsFirst: false }),
+    supabase
+      .from('week_content')
+      .select('*')
+      .eq('week', currentWeek)
+      .single(),
+    user
+      ? supabase
+          .from('week_deliverables')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('week', currentWeek)
+          .single()
+      : Promise.resolve({ data: null }),
+    // One query to count per week — replaces sequential COUNT queries
+    supabase
+      .from('materials')
+      .select('week')
+      .not('week', 'is', null),
+  ])
 
-  // Get week content (objectives, homework, deliverable prompt)
-  const { data: weekContent } = await supabase
-    .from('week_content')
-    .select('*')
-    .eq('week', currentWeek)
-    .single()
+  const userDeliverable = userDeliverableResult.data ?? null
 
-  // Get user's deliverable for this week
-  const { data: userDeliverable } = user
-    ? await supabase
-        .from('week_deliverables')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('week', currentWeek)
-        .single()
-    : { data: null }
+  // Count per week in JS (1 query instead of N)
+  const weekCounts: Record<string, number> = {}
+  WEEKS.forEach(w => { weekCounts[w] = 0 })
+  allMaterialWeeks?.forEach(m => {
+    if (m.week && weekCounts[m.week] !== undefined) weekCounts[m.week]++
+  })
 
-  // Admin: get all deliverables for this week
+  // Round 4: admin-only data (depends on isAdmin from Round 2)
   const { data: allDeliverables } = isAdmin
     ? await supabase
         .from('week_deliverables')
@@ -67,26 +86,21 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
         .order('submitted_at', { ascending: false })
     : { data: null }
 
-  // Get counts for each week tab
-  const weekCounts: Record<string, number> = {}
-  for (const week of WEEKS) {
-    const { count } = await supabase
-      .from('materials')
-      .select('*', { count: 'exact', head: true })
-      .eq('week', week)
-    weekCounts[week] = count || 0
-  }
-
-  // Core-only progress
+  // Tier split for Resources tab
   const coreMats = (materials ?? []).filter(m => m.material_tier === 'core')
   const optionalMats = (materials ?? []).filter(m => m.material_tier === 'optional')
   const referenceMats = (materials ?? []).filter(m => m.material_tier === 'reference')
 
+  // Core-only progress
   const coreTotal = coreMats.length
   const coreReviewed = coreMats.filter(m => userReviewedIds.includes(m.id)).length
   const hasDeliverable = !!userDeliverable
   const corePct = coreTotal > 0 ? Math.round((coreReviewed / coreTotal) * 100) : 0
   const weekComplete = coreTotal > 0 && coreReviewed === coreTotal && hasDeliverable
+
+  // Week header — prefer DB values, fall back to hardcoded constants
+  const weekTitle = weekContent?.title || currentWeek
+  const weekDescription = weekContent?.description || WEEK_DESCRIPTIONS[currentWeek] || ''
 
   const TABS = [
     { id: 'resources', label: '📚 Resources' },
@@ -96,7 +110,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
 
   return (
     <div className="max-w-6xl">
-      {/* Header */}
+      {/* Page header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Weekly Training</h1>
         <p className="text-muted mt-1">Materials organized by training week</p>
@@ -138,9 +152,9 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
       }`}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold text-gray-900">{currentWeek}</h2>
-            {WEEK_DESCRIPTIONS[currentWeek] && (
-              <p className="text-sm text-blue-700 font-medium mt-0.5">{WEEK_DESCRIPTIONS[currentWeek]}</p>
+            <h2 className="text-xl font-bold text-gray-900">{weekTitle}</h2>
+            {weekDescription && (
+              <p className="text-sm text-blue-700 font-medium mt-0.5">{weekDescription}</p>
             )}
             <p className="text-xs text-muted mt-1">
               {materials && materials.length > 0
@@ -303,6 +317,8 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
           {isAdmin && (
             <WeekEditForm
               week={currentWeek}
+              initialTitle={weekContent?.title ?? ''}
+              initialDescription={weekContent?.description ?? ''}
               initialObjectives={weekContent?.objectives ?? ''}
               initialHomework={weekContent?.homework ?? ''}
               initialDeliverablePrompt={weekContent?.deliverable_prompt ?? ''}

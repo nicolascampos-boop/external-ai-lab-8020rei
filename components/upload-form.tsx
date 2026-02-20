@@ -10,14 +10,17 @@ import { CONTENT_TYPES } from '@/lib/supabase/types'
 function normalizeWeek(raw: string): string {
   const s = raw.toLowerCase().trim()
   if (!s) return ''
-  if (s.includes('optional') || s.includes('extra') || s.includes('bonus')) return 'Optional'
+  if (s.includes('reference') || s.includes('ref')) return 'Reference'
+  if (s.includes('optional') || s.includes('extra') || s.includes('bonus')) return 'Reference'
   if (s.includes('1') || s.includes('first') || s.includes('one')) return 'Week 1'
   if (s.includes('2') || s.includes('second') || s.includes('two')) return 'Week 2'
   if (s.includes('3') || s.includes('third') || s.includes('three')) return 'Week 3'
   if (s.includes('4') || s.includes('fourth') || s.includes('four')) return 'Week 4'
   if (s.includes('5') || s.includes('fifth') || s.includes('five')) return 'Week 5'
   if (s.includes('6') || s.includes('sixth') || s.includes('six')) return 'Week 6'
-  // If it already says "Week X", return as-is
+  if (s.includes('7') || s.includes('seventh') || s.includes('seven')) return 'Week 7'
+  if (s.includes('8') || s.includes('eighth') || s.includes('eight')) return 'Week 8'
+  if (s.includes('9') || s.includes('ninth') || s.includes('nine')) return 'Week 9'
   if (s.startsWith('week')) return raw.trim()
   return raw.trim()
 }
