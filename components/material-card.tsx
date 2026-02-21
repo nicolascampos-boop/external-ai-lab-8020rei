@@ -63,20 +63,27 @@ function MaterialCard({ material, selectable, selected, onToggle, from, week, is
       <Link
         href={materialLink}
         className={`flex-1 min-w-0 block rounded-xl border p-3 md:p-6 hover:shadow-lg transition-all ${
-          material.material_tier === 'core'
+          material.material_tier === 'must_read' || material.material_tier === 'must-read' || material.material_tier === 'MUST READ'
             ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 hover:border-amber-400'
-            : material.material_tier === 'reference'
-              ? 'border-slate-300 bg-slate-50/50 hover:border-slate-400'
-              : 'bg-card border-border hover:border-primary/30'
+            : material.material_tier === 'core' || material.material_tier === 'CORE' || material.material_tier === 'Core'
+              ? 'border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 hover:border-blue-400'
+              : material.material_tier === 'reference'
+                ? 'border-slate-300 bg-slate-50/50 hover:border-slate-400'
+                : 'bg-card border-border hover:border-primary/30'
         }`}
       >
         <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3 sm:gap-4">
           <div className="flex-1 min-w-0">
             {/* Badges row with better spacing */}
             <div className="flex items-center gap-1.5 md:gap-2 mb-2 md:mb-3 flex-wrap">
-              {material.material_tier === 'core' && (
+              {(material.material_tier === 'must_read' || material.material_tier === 'must-read' || material.material_tier === 'MUST READ') && (
                 <span className="inline-flex items-center px-2 md:px-3 py-0.5 md:py-1 rounded-md text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-sm flex-shrink-0">
-                  💎 Core
+                  💎 Must Read
+                </span>
+              )}
+              {(material.material_tier === 'core' || material.material_tier === 'CORE' || material.material_tier === 'Core') && (
+                <span className="inline-flex items-center px-2 md:px-3 py-0.5 md:py-1 rounded-md text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm flex-shrink-0">
+                  ⭐ Core
                 </span>
               )}
               {material.material_tier === 'reference' && (
