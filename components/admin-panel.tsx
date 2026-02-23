@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { deleteUser, updateUserRole } from '@/lib/actions/profiles'
 import type { Profile, MaterialWithScores } from '@/lib/supabase/types'
 
