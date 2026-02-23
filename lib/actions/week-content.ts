@@ -90,9 +90,8 @@ export async function submitDeliverable(week: string, link: string, notes?: stri
   const trimmedLink = link.trim()
   const trimmedNotes = notes?.trim() ?? ''
 
-  if (!trimmedLink && !trimmedNotes) {
-    return { error: 'Please provide a link or a description' }
-  }
+  if (!trimmedLink) return { error: 'A link is required' }
+  if (!trimmedNotes) return { error: 'A description is required' }
 
   // Only validate URL format when a link is provided
   if (trimmedLink) {

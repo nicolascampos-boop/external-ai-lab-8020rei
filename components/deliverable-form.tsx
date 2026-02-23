@@ -32,7 +32,7 @@ export default function DeliverableForm({ week, existingLink, existingNotes, exi
   }
 
   const hasExisting = !!(existingLink || existingNotes)
-  const canSubmit = !!(link.trim() || notes.trim())
+  const canSubmit = !!(link.trim() && notes.trim())
 
   return (
     <div className="bg-card rounded-xl border border-border p-6">
@@ -50,13 +50,13 @@ export default function DeliverableForm({ week, existingLink, existingNotes, exi
       )}
 
       <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-        Your deliverable can be any of the following:
+        Both fields are required. Your link can be:
         <span className="block mt-1.5 space-y-0.5 pl-1">
           <span className="block">· A repository (GitHub, GitLab, etc.)</span>
           <span className="block">· A video showcasing your deliverable</span>
           <span className="block">· A link to access your work</span>
-          <span className="block">· A short description answering that week&apos;s objectives</span>
         </span>
+        Your description should answer that week&apos;s objectives.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-3">
@@ -73,15 +73,17 @@ export default function DeliverableForm({ week, existingLink, existingNotes, exi
           type="url"
           value={link}
           onChange={e => setLink(e.target.value)}
-          placeholder="https://... (optional if adding a description below)"
+          placeholder="https://..."
+          required
           className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         />
 
         <textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          placeholder="Add a description or reflection on this week's objectives... (optional if adding a link above)"
+          placeholder="Add a description or reflection on this week's objectives..."
           rows={4}
+          required
           className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
         />
 

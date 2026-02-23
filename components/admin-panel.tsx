@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { deleteUser } from '@/lib/actions/profiles'
+import { createClient } from '@/lib/supabase/client'
+import { deleteUser, updateUserRole } from '@/lib/actions/profiles'
 import type { Profile, MaterialWithScores } from '@/lib/supabase/types'
 
 interface AdminPanelProps {
@@ -47,89 +47,106 @@ export default function AdminPanel({ users, materials }: AdminPanelProps) {
 
 function UsersTable({ users }: { users: Profile[] }) {
   const router = useRouter()
+  const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function toggleRole(userId: string, currentRole: string) {
     const newRole = currentRole === 'admin' ? 'user' : 'admin'
-    const supabase = createClient()
-    await supabase
-      .from('profiles')
-      .update({ role: newRole })
-      .eq('id', userId)
-    router.refresh()
+    setLoadingId(userId + '-role')
+    setError(null)
+    const result = await updateUserRole(userId, newRole)
+    setLoadingId(null)
+    if (result.error) {
+      setError(result.error)
+    } else {
+      router.refresh()
+    }
   }
 
   async function handleDelete(userId: string, userEmail: string) {
     if (!confirm(`Are you sure you want to delete user ${userEmail}? This action cannot be undone.`)) return
+    setLoadingId(userId + '-delete')
+    setError(null)
     const result = await deleteUser(userId)
+    setLoadingId(null)
     if (result.error) {
-      alert(result.error)
+      setError(result.error)
     } else {
       router.refresh()
     }
   }
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden">
-      <table className="w-full">
-        <thead>
-          <tr className="bg-gray-50 border-b border-border">
-            <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">User</th>
-            <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Email</th>
-            <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Role</th>
-            <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Joined</th>
-            <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Last Login</th>
-            <th className="text-right px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {users.map(user => (
-            <tr key={user.id} className="hover:bg-gray-50/50">
-              <td className="px-5 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium">
-                    {(user.full_name || user.email).charAt(0).toUpperCase()}
-                  </div>
-                  <span className="text-sm font-medium text-gray-900">
-                    {user.full_name || '—'}
-                  </span>
-                </div>
-              </td>
-              <td className="px-5 py-3 text-sm text-muted">{user.email}</td>
-              <td className="px-5 py-3">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                  user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {user.role}
-                </span>
-              </td>
-              <td className="px-5 py-3 text-sm text-muted">
-                {new Date(user.created_at).toLocaleDateString()}
-              </td>
-              <td className="px-5 py-3 text-sm text-muted">
-                {user.last_login
-                  ? new Date(user.last_login).toLocaleDateString() + ' ' + new Date(user.last_login).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  : '—'}
-              </td>
-              <td className="px-5 py-3 text-right">
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    onClick={() => toggleRole(user.id, user.role)}
-                    className="text-xs text-primary hover:text-primary-dark font-medium"
-                  >
-                    Make {user.role === 'admin' ? 'User' : 'Admin'}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(user.id, user.email)}
-                    className="text-xs text-red-600 hover:text-red-700 font-medium"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </td>
+    <div>
+      {error && (
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-50 border-b border-border">
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">User</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Email</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Role</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Joined</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Last Login</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {users.map(user => (
+              <tr key={user.id} className="hover:bg-gray-50/50">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium">
+                      {(user.full_name || user.email).charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-gray-900">
+                      {user.full_name || '—'}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-5 py-3 text-sm text-muted">{user.email}</td>
+                <td className="px-5 py-3">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                    user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {user.role}
+                  </span>
+                </td>
+                <td className="px-5 py-3 text-sm text-muted">
+                  {new Date(user.created_at).toLocaleDateString()}
+                </td>
+                <td className="px-5 py-3 text-sm text-muted">
+                  {user.last_login
+                    ? new Date(user.last_login).toLocaleDateString() + ' ' + new Date(user.last_login).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '—'}
+                </td>
+                <td className="px-5 py-3 text-right">
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => toggleRole(user.id, user.role)}
+                      disabled={loadingId === user.id + '-role'}
+                      className="text-xs text-primary hover:text-primary-dark font-medium disabled:opacity-50"
+                    >
+                      {loadingId === user.id + '-role' ? 'Saving...' : `Make ${user.role === 'admin' ? 'User' : 'Admin'}`}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(user.id, user.email)}
+                      disabled={loadingId === user.id + '-delete'}
+                      className="text-xs text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
+                    >
+                      {loadingId === user.id + '-delete' ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
