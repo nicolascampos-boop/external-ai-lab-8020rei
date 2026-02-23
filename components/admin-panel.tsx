@@ -5,14 +5,22 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { deleteUser, updateUserRole } from '@/lib/actions/profiles'
 import type { Profile, MaterialWithScores } from '@/lib/supabase/types'
+import { WEEKS } from '@/lib/supabase/types'
+
+interface ProgressRawData {
+  materials: { id: string; week: string | null; material_tier: string | null }[]
+  votes: { user_id: string; material_id: string; comment: string | null }[]
+  deliverables: { user_id: string; week: string }[]
+}
 
 interface AdminPanelProps {
   users: Profile[]
   materials: MaterialWithScores[]
+  progressData: ProgressRawData
 }
 
-export default function AdminPanel({ users, materials }: AdminPanelProps) {
-  const [tab, setTab] = useState<'users' | 'materials'>('users')
+export default function AdminPanel({ users, materials, progressData }: AdminPanelProps) {
+  const [tab, setTab] = useState<'users' | 'materials' | 'progress'>('users')
 
   return (
     <div>
@@ -34,12 +42,22 @@ export default function AdminPanel({ users, materials }: AdminPanelProps) {
         >
           Materials ({materials.length})
         </button>
+        <button
+          onClick={() => setTab('progress')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            tab === 'progress' ? 'bg-white shadow text-gray-900' : 'text-muted hover:text-gray-700'
+          }`}
+        >
+          Progress
+        </button>
       </div>
 
       {tab === 'users' ? (
         <UsersTable users={users} />
-      ) : (
+      ) : tab === 'materials' ? (
         <MaterialsTable materials={materials} />
+      ) : (
+        <UserProgressView users={users} progressData={progressData} />
       )}
     </div>
   )
@@ -214,6 +232,163 @@ function MaterialsTable({ materials }: { materials: MaterialWithScores[] }) {
       {materials.length === 0 && (
         <div className="p-8 text-center text-muted text-sm">No materials yet.</div>
       )}
+    </div>
+  )
+}
+
+// ─── User Progress View ────────────────────────────────────────────────────────
+
+interface WeekStat {
+  week: string
+  total: number
+  reviewed: number
+  hasDeliverable: boolean
+  pct: number
+  complete: boolean
+}
+
+function normalizeTier(tier: string | null | undefined): string {
+  if (!tier) return ''
+  return tier.toLowerCase().replace(/[\s_-]+/g, '')
+}
+
+function UserProgressView({ users, progressData }: { users: Profile[]; progressData: ProgressRawData }) {
+  const [expandedUser, setExpandedUser] = useState<string | null>(null)
+
+  // Pre-compute required materials per week (shared across all users)
+  const weekRequiredMaterials: Record<string, string[]> = {}
+  for (const week of WEEKS) {
+    weekRequiredMaterials[week] = progressData.materials
+      .filter(m => {
+        if (m.week !== week) return false
+        const t = normalizeTier(m.material_tier)
+        return t === 'mustread' || t === 'core'
+      })
+      .map(m => m.id)
+  }
+
+  // Compute progress for each user
+  const userProgress = users.map(user => {
+    const reviewedIds = new Set(
+      progressData.votes
+        .filter(v => v.user_id === user.id)
+        .map(v => v.material_id)
+    )
+    const deliverableWeeks = new Set(
+      progressData.deliverables
+        .filter(d => d.user_id === user.id)
+        .map(d => d.week)
+    )
+
+    const weekStats = WEEKS
+      .map(week => {
+        const required = weekRequiredMaterials[week]
+        const total = required.length
+        if (total === 0) return null
+        const reviewed = required.filter(id => reviewedIds.has(id)).length
+        const hasDeliverable = deliverableWeeks.has(week)
+        const pct = Math.round((reviewed / total) * 60 + (hasDeliverable ? 40 : 0))
+        const complete = reviewed === total && hasDeliverable
+        return { week, total, reviewed, hasDeliverable, pct, complete }
+      })
+      .filter((s) => s !== null) as WeekStat[]
+
+    const overallPct = weekStats.length > 0
+      ? Math.round(weekStats.reduce((sum, w) => sum + w.pct, 0) / weekStats.length)
+      : 0
+    const weeksComplete = weekStats.filter(w => w.complete).length
+
+    return { user, weekStats, overallPct, weeksComplete }
+  })
+
+  return (
+    <div>
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-50 border-b border-border">
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Member</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Weeks Done</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-muted uppercase tracking-wider">Overall Progress</th>
+              <th className="px-5 py-3 w-8"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {userProgress.map(({ user, weekStats, overallPct, weeksComplete }) => (
+              <tr key={user.id} className="cursor-pointer" onClick={() => setExpandedUser(expandedUser === user.id ? null : user.id)}>
+                <td className="px-5 py-3" colSpan={expandedUser === user.id ? undefined : undefined}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium flex-shrink-0">
+                      {(user.full_name || user.email).charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{user.full_name || '—'}</p>
+                      <p className="text-xs text-muted">{user.email}</p>
+                    </div>
+                  </div>
+                  {/* Per-week progress — shown inline when expanded */}
+                  {expandedUser === user.id && weekStats.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4 mb-1">
+                      {weekStats.map(stat => (
+                        <div
+                          key={stat.week}
+                          className={`rounded-lg border p-3 ${stat.complete ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'}`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs font-semibold text-gray-800">{stat.week}</span>
+                            {stat.complete
+                              ? <span className="text-xs text-green-600 font-medium">✓ Done</span>
+                              : <span className="text-xs text-gray-500">{stat.pct}%</span>
+                            }
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-1.5 mb-1.5">
+                            <div
+                              className={`h-1.5 rounded-full transition-all ${stat.complete ? 'bg-green-500' : 'bg-primary'}`}
+                              style={{ width: `${stat.pct}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>{stat.reviewed}/{stat.total} reviewed</span>
+                            <span className="text-gray-300">·</span>
+                            <span className={stat.hasDeliverable ? 'text-green-600' : 'text-gray-400'}>
+                              {stat.hasDeliverable ? '✓ deliverable' : 'deliverable pending'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </td>
+                <td className="px-5 py-3 align-top">
+                  <span className="text-sm text-gray-900">{weeksComplete}/{weekStats.length}</span>
+                </td>
+                <td className="px-5 py-3 align-top">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-gray-100 rounded-full h-2 min-w-[6rem]">
+                      <div
+                        className={`h-2 rounded-full transition-all ${overallPct === 100 ? 'bg-green-500' : 'bg-primary'}`}
+                        style={{ width: `${overallPct}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-medium text-gray-700 w-8 text-right">{overallPct}%</span>
+                  </div>
+                </td>
+                <td className="px-5 py-3 align-top text-right">
+                  <svg
+                    className={`w-4 h-4 text-muted transition-transform ${expandedUser === user.id ? 'rotate-180' : ''}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {users.length === 0 && (
+          <div className="p-8 text-center text-muted text-sm">No users yet.</div>
+        )}
+      </div>
     </div>
   )
 }

@@ -109,16 +109,27 @@ export default async function DashboardPage() {
   const userReviewedIds = new Set((userVotes ?? []).map(v => v.material_id))
   const submittedWeeks = new Set((userDeliverables ?? []).map(d => d.week))
 
-  // Compute per-week progress — only Core materials count toward progress
+  // Helper: normalize tier strings (case-insensitive, space-insensitive)
+  const normalizeTier = (tier: string | null | undefined): string => {
+    if (!tier) return ''
+    return tier.toLowerCase().replace(/[\s_-]+/g, '')
+  }
+
+  // Compute per-week progress — must_read + core, any vote counts, 60% reading / 40% deliverable
   const weekProgress = WEEKS.map(week => {
     const weekMaterials = (allMaterialsWeeks ?? []).filter(m => m.week === week)
-    const coreMaterials = weekMaterials.filter(m => m.material_tier === 'core')
-    const total = coreMaterials.length
-    const reviewed = coreMaterials.filter(m => userReviewedIds.has(m.id)).length
+    const requiredMaterials = weekMaterials.filter(m => {
+      const t = normalizeTier(m.material_tier)
+      return t === 'mustread' || t === 'core'
+    })
+    const total = requiredMaterials.length
+    const reviewed = requiredMaterials.filter(m => userReviewedIds.has(m.id)).length
     const hasDeliverable = submittedWeeks.has(week)
-    // Week complete = all Core reviewed + deliverable submitted (if any core materials exist)
+    const readingPct = total > 0 ? (reviewed / total) * 60 : 0
+    const deliverablePct = hasDeliverable ? 40 : 0
+    const pct = Math.round(readingPct + deliverablePct)
     const complete = total > 0 && reviewed === total && hasDeliverable
-    return { week, total, reviewed, pct: total > 0 ? Math.round((reviewed / total) * 100) : 0, hasDeliverable, complete }
+    return { week, total, reviewed, pct, hasDeliverable, complete }
   }).filter(w => w.total > 0)
 
   return (
@@ -260,7 +271,7 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">📊 Your Progress</h2>
-              <p className="text-xs text-muted">Core materials reviewed + deliverable submitted per week</p>
+              <p className="text-xs text-muted">Required materials reviewed + deliverable submitted per week</p>
             </div>
             <Link href="/weekly" className="text-xs text-primary hover:text-primary-dark font-medium">
               Continue training →
@@ -292,7 +303,7 @@ export default async function DashboardPage() {
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <p className="text-xs text-muted">{reviewed}/{total} core reviewed</p>
+                <p className="text-xs text-muted">{reviewed}/{total} required reviewed</p>
                 {total > 0 && reviewed === total && !hasDeliverable && (
                   <p className="text-xs text-amber-600 font-medium mt-1">Submit deliverable to complete →</p>
                 )}

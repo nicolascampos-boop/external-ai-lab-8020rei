@@ -132,15 +132,15 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
     return normalized === 'reference'
   })
 
-  // Progress: must_read + core materials (each = 1 pt) + deliverable (= 1 pt)
+  // Progress: reviewing required materials (must_read + core, any vote) = 60%, deliverable = 40%
   const requiredMats = [...mustReadMats, ...coreMats]
   const requiredTotal = requiredMats.length
   const requiredReviewed = requiredMats.filter(m => userReviewedIds.includes(m.id)).length
   const hasDeliverable = !!userDeliverable
-  const totalPoints = requiredTotal + 1  // +1 for deliverable
-  const earnedPoints = requiredReviewed + (hasDeliverable ? 1 : 0)
-  const progressPct = totalPoints > 1 ? Math.round((earnedPoints / totalPoints) * 100) : 0
-  const weekComplete = requiredTotal > 0 && earnedPoints === totalPoints
+  const readingPct = requiredTotal > 0 ? (requiredReviewed / requiredTotal) * 60 : 0
+  const deliverablePct = hasDeliverable ? 40 : 0
+  const progressPct = Math.round(readingPct + deliverablePct)
+  const weekComplete = requiredTotal > 0 && requiredReviewed === requiredTotal && hasDeliverable
 
   // Week header — prefer DB values, fall back to constants
   const weekTitle = weekContent?.title || currentWeek
@@ -221,7 +221,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-medium text-gray-700">Week progress</span>
                   <span className="text-xs font-semibold text-gray-900">
-                    {earnedPoints}/{totalPoints} complete
+                    {progressPct}% complete
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">

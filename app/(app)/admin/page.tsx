@@ -31,6 +31,17 @@ export default async function AdminPage() {
     .select('*')
     .order('created_at', { ascending: false })
 
+  // Progress tracking data
+  const [
+    { data: progressMaterials },
+    { data: allVotes },
+    { data: allDeliverables },
+  ] = await Promise.all([
+    supabase.from('materials').select('id, week, material_tier').not('week', 'is', null),
+    supabase.from('votes').select('user_id, material_id, comment'),
+    supabase.from('week_deliverables').select('user_id, week'),
+  ])
+
   return (
     <div className="max-w-6xl">
       <div className="mb-6">
@@ -38,7 +49,15 @@ export default async function AdminPage() {
         <p className="text-muted mt-1">Manage users and materials</p>
       </div>
 
-      <AdminPanel users={users || []} materials={materials || []} />
+      <AdminPanel
+        users={users || []}
+        materials={materials || []}
+        progressData={{
+          materials: progressMaterials || [],
+          votes: allVotes || [],
+          deliverables: allDeliverables || [],
+        }}
+      />
     </div>
   )
 }
