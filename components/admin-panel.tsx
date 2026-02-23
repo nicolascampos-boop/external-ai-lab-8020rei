@@ -241,7 +241,7 @@ function MaterialsTable({ materials }: { materials: MaterialWithScores[] }) {
 interface WeekStat {
   week: string
   total: number
-  commented: number
+  reviewed: number
   hasDeliverable: boolean
   pct: number
   complete: boolean
@@ -269,9 +269,9 @@ function UserProgressView({ users, progressData }: { users: Profile[]; progressD
 
   // Compute progress for each user
   const userProgress = users.map(user => {
-    const commentedIds = new Set(
+    const reviewedIds = new Set(
       progressData.votes
-        .filter(v => v.user_id === user.id && v.comment && v.comment.trim().length > 0)
+        .filter(v => v.user_id === user.id)
         .map(v => v.material_id)
     )
     const deliverableWeeks = new Set(
@@ -280,18 +280,18 @@ function UserProgressView({ users, progressData }: { users: Profile[]; progressD
         .map(d => d.week)
     )
 
-    const weekStats: WeekStat[] = WEEKS
+    const weekStats = WEEKS
       .map(week => {
         const required = weekRequiredMaterials[week]
         const total = required.length
         if (total === 0) return null
-        const commented = required.filter(id => commentedIds.has(id)).length
+        const reviewed = required.filter(id => reviewedIds.has(id)).length
         const hasDeliverable = deliverableWeeks.has(week)
-        const pct = Math.round((commented / total) * 60 + (hasDeliverable ? 40 : 0))
-        const complete = commented === total && hasDeliverable
-        return { week, total, commented, hasDeliverable, pct, complete }
+        const pct = Math.round((reviewed / total) * 60 + (hasDeliverable ? 40 : 0))
+        const complete = reviewed === total && hasDeliverable
+        return { week, total, reviewed, hasDeliverable, pct, complete }
       })
-      .filter((s): s is WeekStat => s !== null)
+      .filter((s) => s !== null) as WeekStat[]
 
     const overallPct = weekStats.length > 0
       ? Math.round(weekStats.reduce((sum, w) => sum + w.pct, 0) / weekStats.length)
@@ -348,7 +348,7 @@ function UserProgressView({ users, progressData }: { users: Profile[]; progressD
                             />
                           </div>
                           <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span>{stat.commented}/{stat.total} read</span>
+                            <span>{stat.reviewed}/{stat.total} reviewed</span>
                             <span className="text-gray-300">·</span>
                             <span className={stat.hasDeliverable ? 'text-green-600' : 'text-gray-400'}>
                               {stat.hasDeliverable ? '✓ deliverable' : 'deliverable pending'}

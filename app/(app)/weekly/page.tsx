@@ -27,17 +27,13 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
   // Round 2: profile + user vote IDs (parallel)
   let isAdmin = false
   let userReviewedIds: string[] = []
-  let userCommentedIds: string[] = []
   if (user) {
     const [{ data: profile }, { data: userVotes }] = await Promise.all([
       supabase.from('profiles').select('role').eq('id', user.id).single(),
-      supabase.from('votes').select('material_id, comment').eq('user_id', user.id),
+      supabase.from('votes').select('material_id').eq('user_id', user.id),
     ])
     isAdmin = profile?.role === 'admin'
     userReviewedIds = (userVotes ?? []).map(v => v.material_id)
-    userCommentedIds = (userVotes ?? [])
-      .filter(v => v.comment && v.comment.trim().length > 0)
-      .map(v => v.material_id)
   }
 
   // Round 3: all independent data (parallel)
@@ -136,15 +132,15 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
     return normalized === 'reference'
   })
 
-  // Progress: reading required materials (must_read + core, with comment) = 60%, deliverable = 40%
+  // Progress: reviewing required materials (must_read + core, any vote) = 60%, deliverable = 40%
   const requiredMats = [...mustReadMats, ...coreMats]
   const requiredTotal = requiredMats.length
-  const requiredCommented = requiredMats.filter(m => userCommentedIds.includes(m.id)).length
+  const requiredReviewed = requiredMats.filter(m => userReviewedIds.includes(m.id)).length
   const hasDeliverable = !!userDeliverable
-  const readingPct = requiredTotal > 0 ? (requiredCommented / requiredTotal) * 60 : 0
+  const readingPct = requiredTotal > 0 ? (requiredReviewed / requiredTotal) * 60 : 0
   const deliverablePct = hasDeliverable ? 40 : 0
   const progressPct = Math.round(readingPct + deliverablePct)
-  const weekComplete = requiredTotal > 0 && requiredCommented === requiredTotal && hasDeliverable
+  const weekComplete = requiredTotal > 0 && requiredReviewed === requiredTotal && hasDeliverable
 
   // Week header — prefer DB values, fall back to constants
   const weekTitle = weekContent?.title || currentWeek
@@ -238,7 +234,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                 </div>
                 <div className="flex items-center gap-3 mt-1.5">
                   <span className="text-xs text-gray-500">
-                    {requiredCommented}/{requiredTotal} required read
+                    {requiredReviewed}/{requiredTotal} required reviewed
                   </span>
                   <span className="text-gray-300">·</span>
                   <span className={`text-xs font-medium ${hasDeliverable ? 'text-green-600' : 'text-gray-400'}`}>
@@ -248,9 +244,9 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                 {weekComplete && (
                   <p className="text-xs text-green-600 font-medium mt-1">✓ Week complete!</p>
                 )}
-                {!weekComplete && requiredCommented === requiredTotal && requiredTotal > 0 && !hasDeliverable && (
+                {!weekComplete && requiredReviewed === requiredTotal && requiredTotal > 0 && !hasDeliverable && (
                   <p className="text-xs text-amber-600 font-medium mt-1">
-                    All required materials read — go to Objectives to submit your deliverable →
+                    All required materials reviewed — go to Objectives to submit your deliverable →
                   </p>
                 )}
               </div>
