@@ -42,6 +42,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
     userDeliverableResult,
     { data: allMaterialWeeks },
     { data: allWeeksStatus },
+    { data: allDeliverables },
   ] = await Promise.all([
     supabase
       .from('material_scores')
@@ -66,6 +67,12 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
     supabase.from('materials').select('week').not('week', 'is', null),
     // Fetch enabled status for all weeks (for tab visibility)
     supabase.from('week_content').select('week, is_enabled'),
+    // All submissions for this week — visible to everyone (RLS: SELECT USING true)
+    supabase
+      .from('week_deliverables')
+      .select('*, profiles(full_name, email)')
+      .eq('week', currentWeek)
+      .order('submitted_at', { ascending: false }),
   ])
 
   const userDeliverable = userDeliverableResult.data ?? null
@@ -92,15 +99,6 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
   allMaterialWeeks?.forEach(m => {
     if (m.week && weekCounts[m.week] !== undefined) weekCounts[m.week]++
   })
-
-  // Round 4: admin-only data
-  const { data: allDeliverables } = isAdmin
-    ? await supabase
-        .from('week_deliverables')
-        .select('*, profiles(full_name, email)')
-        .eq('week', currentWeek)
-        .order('submitted_at', { ascending: false })
-    : { data: null }
 
   // Helper to normalize tier values for comparison (case-insensitive, space-insensitive)
   const normalizeTier = (tier: string | null | undefined): string => {
@@ -149,7 +147,6 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
   const TABS = [
     { id: 'resources', label: '📚 Resources' },
     { id: 'objectives', label: '🎯 Objectives' },
-    { id: 'deliverable', label: '📬 Deliverable' },
   ] as const
 
   return (
@@ -241,7 +238,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                 )}
                 {!weekComplete && requiredReviewed === requiredTotal && requiredTotal > 0 && !hasDeliverable && (
                   <p className="text-xs text-amber-600 font-medium mt-1">
-                    All required materials reviewed — submit your deliverable to complete this week →
+                    All required materials reviewed — go to Objectives to submit your deliverable →
                   </p>
                 )}
               </div>
@@ -279,7 +276,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* Sub-tabs: Resources / Objectives / Deliverable */}
+      {/* Sub-tabs: Resources / Objectives */}
       <div className="flex gap-1 mb-6 border-b border-border">
         {TABS.map(tab => (
           <Link
@@ -410,9 +407,10 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* Objectives Tab */}
+      {/* Objectives Tab — includes deliverable submission and community submissions */}
       {currentTab === 'objectives' && (
         <div className="space-y-4">
+          {/* Learning Objectives */}
           {weekContent?.objectives ? (
             <div className="bg-card rounded-xl border border-border p-6">
               <h3 className="font-semibold text-gray-900 mb-3">🎯 Learning Objectives</h3>
@@ -424,78 +422,87 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
             </div>
           )}
 
+          {/* Homework */}
           {weekContent?.homework && (
             <div className="bg-card rounded-xl border border-border p-6">
               <h3 className="font-semibold text-gray-900 mb-3">📝 Homework &amp; To-Do</h3>
               <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{weekContent.homework}</p>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Deliverable Tab */}
-      {currentTab === 'deliverable' && (
-        <div className="space-y-4">
-          {weekContent?.deliverable_prompt ? (
-            <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
-              <h3 className="font-semibold text-amber-900 mb-2">📬 Deliverable</h3>
-              <p className="text-sm text-amber-800 leading-relaxed">{weekContent.deliverable_prompt}</p>
-            </div>
-          ) : (
-            <div className="bg-card rounded-xl border border-border p-5">
-              <p className="text-sm text-muted">
-                {isAdmin ? 'Use the Edit Week panel above to add a deliverable prompt.' : 'No deliverable assigned for this week yet.'}
-              </p>
-            </div>
-          )}
-
-          <DeliverableForm
-            week={currentWeek}
-            existingLink={userDeliverable?.link ?? null}
-            existingSubmittedAt={userDeliverable?.submitted_at ?? null}
-          />
-
-          {/* Admin: all submissions */}
-          {isAdmin && allDeliverables && allDeliverables.length > 0 && (
-            <div className="bg-card rounded-xl border border-border p-6 mt-4">
-              <h3 className="font-semibold text-gray-900 mb-3">
-                All Submissions ({allDeliverables.length})
-              </h3>
-              <div className="space-y-2">
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                {(allDeliverables as any[]).map(d => {
-                  const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles
-                  return (
-                    <div key={d.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
-                      <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium flex-shrink-0">
-                        {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-700">
-                          {profile?.full_name || profile?.email || 'Unknown'}
-                        </p>
-                        <a
-                          href={d.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-primary hover:underline truncate block"
-                        >
-                          {d.link}
-                        </a>
-                      </div>
-                      <span className="text-xs text-muted flex-shrink-0">
-                        {new Date(d.submitted_at).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </span>
-                    </div>
-                  )
-                })}
+          {/* Deliverable section */}
+          <div className="border-t border-border pt-4 space-y-4">
+            {/* Deliverable prompt */}
+            {weekContent?.deliverable_prompt ? (
+              <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
+                <h3 className="font-semibold text-amber-900 mb-2">📬 Deliverable</h3>
+                <p className="text-sm text-amber-800 leading-relaxed">{weekContent.deliverable_prompt}</p>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="bg-card rounded-xl border border-border p-5">
+                <p className="text-sm text-muted">
+                  {isAdmin ? 'Use the Edit Week panel above to add a deliverable prompt.' : 'No deliverable assigned for this week yet.'}
+                </p>
+              </div>
+            )}
+
+            {/* Submission form */}
+            <DeliverableForm
+              week={currentWeek}
+              existingLink={userDeliverable?.link ?? null}
+              existingNotes={userDeliverable?.notes ?? null}
+              existingSubmittedAt={userDeliverable?.submitted_at ?? null}
+            />
+
+            {/* Community submissions — visible to all users */}
+            {allDeliverables && allDeliverables.length > 0 && (
+              <div className="bg-card rounded-xl border border-border p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">
+                  Submissions ({allDeliverables.length})
+                </h3>
+                <div className="space-y-1">
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {(allDeliverables as any[]).map(d => {
+                    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles
+                    return (
+                      <div key={d.id} className="flex items-start gap-3 py-3 border-b border-border last:border-0">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">
+                          {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <p className="text-sm font-medium text-gray-700">
+                              {profile?.full_name || profile?.email || 'Unknown'}
+                            </p>
+                            <span className="text-xs text-muted">
+                              {new Date(d.submitted_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </span>
+                          </div>
+                          {d.link && (
+                            <a
+                              href={d.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline truncate block"
+                            >
+                              {d.link}
+                            </a>
+                          )}
+                          {d.notes && (
+                            <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap line-clamp-4">{d.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -85,7 +85,8 @@ export interface WeekDeliverable {
   id: string
   user_id: string
   week: string
-  link: string
+  link: string | null
+  notes: string | null
   submitted_at: string
 }
 

@@ -79,20 +79,28 @@ export async function toggleWeekEnabled(week: string, enabled: boolean) {
   return { success: true }
 }
 
-// Submit or update a user's deliverable link for a week (any authenticated user)
-export async function submitDeliverable(week: string, link: string) {
+// Submit or update a user's deliverable for a week (any authenticated user)
+// Accepts a link, notes, or both — at least one must be provided
+export async function submitDeliverable(week: string, link: string, notes?: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) return { error: 'Not authenticated' }
 
-  if (!link.trim()) return { error: 'Link is required' }
+  const trimmedLink = link.trim()
+  const trimmedNotes = notes?.trim() ?? ''
 
-  // Basic URL validation
-  try {
-    new URL(link.trim())
-  } catch {
-    return { error: 'Please enter a valid URL (including https://)' }
+  if (!trimmedLink && !trimmedNotes) {
+    return { error: 'Please provide a link or a description' }
+  }
+
+  // Only validate URL format when a link is provided
+  if (trimmedLink) {
+    try {
+      new URL(trimmedLink)
+    } catch {
+      return { error: 'Please enter a valid URL (including https://)' }
+    }
   }
 
   const { error } = await supabase
@@ -101,7 +109,8 @@ export async function submitDeliverable(week: string, link: string) {
       {
         user_id: user.id,
         week,
-        link: link.trim(),
+        link: trimmedLink || null,
+        notes: trimmedNotes || null,
         submitted_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,week' }
