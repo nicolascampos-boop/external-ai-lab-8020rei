@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import MaterialList from '@/components/material-list'
 import FilterBar from '@/components/filter-bar'
-import { CATEGORIES, CONTENT_TYPES } from '@/lib/supabase/types'
+import { CONTENT_TYPES } from '@/lib/supabase/types'
 
 interface Props {
   searchParams: Promise<{
@@ -33,6 +33,12 @@ export default async function LibraryPage({ searchParams }: Props) {
     isAdmin = profile?.role === 'admin'
     userReviewedIds = (userVotes ?? []).map(v => v.material_id)
   }
+
+  // Fetch all distinct categories from the DB so the filter dropdown always matches stored values
+  const { data: categoryRows } = await supabase.from('materials').select('categories')
+  const dbCategories = [...new Set(
+    (categoryRows ?? []).flatMap(m => (m.categories as string[] | null) ?? []).filter(Boolean)
+  )].sort()
 
   let query = supabase.from('material_scores').select('*')
 
@@ -173,7 +179,7 @@ export default async function LibraryPage({ searchParams }: Props) {
       </div>
 
       <FilterBar
-        categories={[...CATEGORIES]}
+        categories={dbCategories}
         contentTypes={[...CONTENT_TYPES]}
         currentSearch={params.search || ''}
         currentCategory={params.category || 'all'}

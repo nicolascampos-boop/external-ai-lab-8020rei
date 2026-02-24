@@ -101,6 +101,24 @@ export interface WeekDeliverable {
   submitted_at: string
 }
 
+export interface WeekSession {
+  id: string
+  week: string
+  title: string
+  link: string
+  session_type: 'weekly' | 'team' | 'speaker'
+  description: string | null
+  session_date: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export const SESSION_TYPE_META: Record<string, { label: string; icon: string; bgColor: string; textColor: string; borderColor: string }> = {
+  weekly:  { label: 'Weekly Session',  icon: '🎬', bgColor: 'bg-blue-50',   textColor: 'text-blue-700',   borderColor: 'border-blue-200'   },
+  team:    { label: 'Team Session',    icon: '👥', bgColor: 'bg-purple-50', textColor: 'text-purple-700', borderColor: 'border-purple-200' },
+  speaker: { label: 'Speaker Session', icon: '🎤', bgColor: 'bg-amber-50',  textColor: 'text-amber-700',  borderColor: 'border-amber-200'  },
+}
+
 export const CATEGORIES = [
   'AI Fundamentals',
   'Implementation Strategy',

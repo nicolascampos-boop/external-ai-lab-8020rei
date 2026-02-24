@@ -4,7 +4,15 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { uploadMaterials, type ParsedMaterial } from '@/lib/actions/materials'
-import { CONTENT_TYPES } from '@/lib/supabase/types'
+import { CONTENT_TYPES, CATEGORIES } from '@/lib/supabase/types'
+
+// Map a raw category string to its canonical CATEGORIES value (case-insensitive),
+// or return the trimmed original if no match is found.
+function normalizeCategory(raw: string): string {
+  const trimmed = raw.trim()
+  const match = CATEGORIES.find(c => c.toLowerCase() === trimmed.toLowerCase())
+  return match ?? trimmed
+}
 
 // Normalize week/stage values to "Week 1", "Week 2", etc.
 function normalizeWeek(raw: string): string {
@@ -100,7 +108,7 @@ function parseRowsToMaterials(
       const description = get('description')
       const categoryRaw = get('categories')
       const categories = categoryRaw
-        ? categoryRaw.split(',').map(c => c.trim()).filter(Boolean)
+        ? categoryRaw.split(',').map(c => normalizeCategory(c)).filter(Boolean)
         : []
 
       // Parse scores - prioritize quality + relevance, fallback to average score

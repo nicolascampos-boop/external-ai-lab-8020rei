@@ -5,6 +5,7 @@ import WeekEditForm from '@/components/week-edit-form'
 import WeekLockToggle from '@/components/week-lock-toggle'
 import DeliverableForm from '@/components/deliverable-form'
 import MemberResourcesSection from '@/components/member-resources-section'
+import WeekSessionsSection from '@/components/week-sessions-section'
 import Link from 'next/link'
 import { WEEKS, WEEK_DESCRIPTIONS } from '@/lib/supabase/types'
 
@@ -45,6 +46,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
     { data: allWeeksStatus },
     { data: allDeliverables },
     { data: memberResources },
+    { data: weekSessions },
   ] = await Promise.all([
     supabase
       .from('material_scores')
@@ -81,6 +83,13 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
       .select('*, adder:profiles(full_name, email)')
       .eq('week', currentWeek)
       .order('created_at', { ascending: false }),
+    // Session recordings for this week
+    supabase
+      .from('week_sessions')
+      .select('*')
+      .eq('week', currentWeek)
+      .order('session_date', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true }),
   ])
 
   const userDeliverable = userDeliverableResult.data ?? null
@@ -155,6 +164,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
   const TABS = [
     { id: 'resources', label: '📚 Resources' },
     { id: 'objectives', label: '🎯 Objectives' },
+    { id: 'sessions', label: '🎬 Sessions' },
   ] as const
 
   return (
@@ -421,6 +431,15 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
             isAdmin={isAdmin}
           />
         </div>
+      )}
+
+      {/* Sessions Tab */}
+      {currentTab === 'sessions' && (
+        <WeekSessionsSection
+          week={currentWeek}
+          sessions={weekSessions ?? []}
+          isAdmin={isAdmin}
+        />
       )}
 
       {/* Objectives Tab — includes deliverable submission and community submissions */}
