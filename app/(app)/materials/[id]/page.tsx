@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import VoteWidget from '@/components/vote-widget'
 import ReviewReactions from '@/components/review-reactions'
+import CommentReplies from '@/components/comment-replies'
 
 const CONTENT_TYPE_COLORS: Record<string, string> = {
   'Video': 'bg-rose-100 text-rose-700',
@@ -29,8 +30,14 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
   // Determine back link based on referrer
   const backHref = search.from === 'weekly' && search.week
     ? `/weekly?week=${encodeURIComponent(search.week)}`
-    : '/library'
-  const backLabel = search.from === 'weekly' ? 'Back to Weekly Training' : 'Back to Library'
+    : search.from === 'dashboard'
+      ? '/dashboard'
+      : '/library'
+  const backLabel = search.from === 'weekly'
+    ? 'Back to Weekly Training'
+    : search.from === 'dashboard'
+      ? 'Back to Dashboard'
+      : 'Back to Library'
 
   // Get material with scores
   const { data: material } = await supabase
@@ -74,6 +81,22 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
         .in('vote_id', voteIds)
     : { data: [] }
 
+  // Get replies for all votes on this material
+  const { data: allReplies } = voteIds.length > 0
+    ? await supabase
+        .from('vote_replies')
+        .select('id, vote_id, content, created_at, user_id, profiles(full_name, email)')
+        .in('vote_id', voteIds)
+        .order('created_at', { ascending: true })
+    : { data: [] }
+
+  // Group replies by vote_id
+  const repliesByVote = (allReplies || []).reduce((acc, r) => {
+    if (!acc[r.vote_id]) acc[r.vote_id] = []
+    acc[r.vote_id].push(r)
+    return acc
+  }, {} as Record<string, typeof allReplies>)
+
   // Calculate reaction counts and user reactions per vote
   const reactionsByVote = (reactions || []).reduce((acc, r) => {
     if (!acc[r.vote_id]) {
@@ -85,21 +108,16 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
     return acc
   }, {} as Record<string, { likes: number; dislikes: number; userReaction: 'like' | 'dislike' | null }>)
 
-  const overallScore = material.vote_count > 0
-    ? ((material.avg_quality + material.avg_relevance) / 2).toFixed(1)
-    : material.initial_score
-      ? material.initial_score.toFixed(1)
-      : null
+  // avg_quality / avg_relevance / avg_overall from the view already blend
+  // initial_quality/relevance as a baseline, so use them directly.
+  const hasScore = material.avg_overall > 0
+  const overallScore = hasScore ? Number(material.avg_overall).toFixed(1) : null
+  const scoreLabel = hasScore
+    ? `Overall Score${material.vote_count > 0 ? ` (${material.vote_count} ${material.vote_count === 1 ? 'review' : 'reviews'})` : ''}`
+    : 'No Score Yet'
 
-  const scoreLabel = material.vote_count > 0 ? 'Overall Score' : material.initial_score ? 'Total Score' : 'No Score Yet'
-
-  // Get quality and relevance for imported materials
-  const displayQuality = material.vote_count > 0
-    ? material.avg_quality.toFixed(1)
-    : material.initial_quality?.toFixed(1) ?? '—'
-  const displayRelevance = material.vote_count > 0
-    ? material.avg_relevance.toFixed(1)
-    : material.initial_relevance?.toFixed(1) ?? '—'
+  const displayQuality = material.avg_quality > 0 ? Number(material.avg_quality).toFixed(1) : '—'
+  const displayRelevance = material.avg_relevance > 0 ? Number(material.avg_relevance).toFixed(1) : '—'
 
   return (
     <div className="max-w-4xl">
@@ -201,21 +219,6 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
                   <span>{material.week}</span>
                 </div>
               )}
-              {material.initial_score && material.vote_count === 0 && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <svg className="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                  </svg>
-                  <span>
-                    Total score: {material.initial_score.toFixed(1)}/5
-                    {material.initial_quality && material.initial_relevance && (
-                      <span className="text-muted ml-1">
-                        (Q: {material.initial_quality.toFixed(1)}, R: {material.initial_relevance.toFixed(1)})
-                      </span>
-                    )}
-                  </span>
-                </div>
-              )}
             </div>
 
             {/* Meta info */}
@@ -274,6 +277,12 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
                         userReaction={voteReactions.userReaction}
                       />
                     </div>
+                    <CommentReplies
+                      voteId={vote.id}
+                      materialId={id}
+                      initialReplies={(repliesByVote[vote.id] || []) as any}
+                      currentUserId={user!.id}
+                    />
                   </div>
                   )
                 })}

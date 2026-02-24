@@ -332,7 +332,7 @@ export default async function DashboardPage() {
                   <div className="absolute -left-3 top-5 w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white text-xs font-bold z-10">
                     {idx + 1}
                   </div>
-                  <MaterialCard material={material} isReviewed={userReviewedIds.has(material.id)} />
+                  <MaterialCard material={material} from="dashboard" isReviewed={userReviewedIds.has(material.id)} />
                 </div>
               ))}
             </div>
@@ -352,7 +352,7 @@ export default async function DashboardPage() {
             </div>
             <div className="space-y-3">
               {topRated.slice(0, 5).map(material => (
-                <MaterialCard key={material.id} material={material} isReviewed={userReviewedIds.has(material.id)} />
+                <MaterialCard key={material.id} material={material} from="dashboard" isReviewed={userReviewedIds.has(material.id)} />
               ))}
             </div>
           </section>
@@ -371,7 +371,7 @@ export default async function DashboardPage() {
             </div>
             <div className="space-y-3">
               {recentlyActive.slice(0, 5).map(material => (
-                <MaterialCard key={material.id} material={material} isReviewed={userReviewedIds.has(material.id)} />
+                <MaterialCard key={material.id} material={material} from="dashboard" isReviewed={userReviewedIds.has(material.id)} />
               ))}
             </div>
           </section>
