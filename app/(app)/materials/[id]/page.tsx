@@ -48,6 +48,17 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
 
   if (!material) notFound()
 
+  // Record that this user opened the material (fire-and-forget, never blocks render)
+  const viewSource = ['weekly', 'library', 'dashboard'].includes(search.from ?? '')
+    ? (search.from as string)
+    : 'other'
+  supabase.from('material_views').insert({
+    user_id: user!.id,
+    material_id: id,
+    material_week: material.week ?? null,
+    source: viewSource,
+  }).then(() => {})
+
   // Get uploader info
   const { data: uploader } = material.uploaded_by
     ? await supabase

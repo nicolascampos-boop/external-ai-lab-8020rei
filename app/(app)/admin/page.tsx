@@ -31,15 +31,17 @@ export default async function AdminPage() {
     .select('*')
     .order('created_at', { ascending: false })
 
-  // Progress tracking data
+  // Progress tracking data + engagement views (all in parallel)
   const [
     { data: progressMaterials },
     { data: allVotes },
     { data: allDeliverables },
+    { data: allViews },
   ] = await Promise.all([
-    supabase.from('materials').select('id, week, material_tier').not('week', 'is', null),
+    supabase.from('materials').select('id, week, material_tier, title').not('week', 'is', null),
     supabase.from('votes').select('user_id, material_id, comment'),
     supabase.from('week_deliverables').select('user_id, week'),
+    supabase.from('material_views').select('user_id, material_id, material_week, source, viewed_at'),
   ])
 
   return (
@@ -56,6 +58,9 @@ export default async function AdminPage() {
           materials: progressMaterials || [],
           votes: allVotes || [],
           deliverables: allDeliverables || [],
+        }}
+        engagementData={{
+          views: allViews || [],
         }}
       />
     </div>

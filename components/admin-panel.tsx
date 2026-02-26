@@ -8,19 +8,28 @@ import type { Profile, MaterialWithScores } from '@/lib/supabase/types'
 import { WEEKS } from '@/lib/supabase/types'
 
 interface ProgressRawData {
-  materials: { id: string; week: string | null; material_tier: string | null }[]
+  materials: { id: string; week: string | null; material_tier: string | null; title?: string | null }[]
   votes: { user_id: string; material_id: string; comment: string | null }[]
   deliverables: { user_id: string; week: string }[]
+}
+
+interface ViewRecord {
+  user_id: string
+  material_id: string
+  material_week: string | null
+  source: string
+  viewed_at: string
 }
 
 interface AdminPanelProps {
   users: Profile[]
   materials: MaterialWithScores[]
   progressData: ProgressRawData
+  engagementData: { views: ViewRecord[] }
 }
 
-export default function AdminPanel({ users, materials, progressData }: AdminPanelProps) {
-  const [tab, setTab] = useState<'users' | 'materials' | 'progress'>('users')
+export default function AdminPanel({ users, materials, progressData, engagementData }: AdminPanelProps) {
+  const [tab, setTab] = useState<'users' | 'materials' | 'progress' | 'engagement'>('users')
 
   return (
     <div>
@@ -50,14 +59,24 @@ export default function AdminPanel({ users, materials, progressData }: AdminPane
         >
           Progress
         </button>
+        <button
+          onClick={() => setTab('engagement')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            tab === 'engagement' ? 'bg-white shadow text-gray-900' : 'text-muted hover:text-gray-700'
+          }`}
+        >
+          Engagement
+        </button>
       </div>
 
       {tab === 'users' ? (
         <UsersTable users={users} />
       ) : tab === 'materials' ? (
         <MaterialsTable materials={materials} />
-      ) : (
+      ) : tab === 'progress' ? (
         <UserProgressView users={users} progressData={progressData} />
+      ) : (
+        <EngagementView users={users} progressData={progressData} views={engagementData.views} />
       )}
     </div>
   )
@@ -389,6 +408,250 @@ function UserProgressView({ users, progressData }: { users: Profile[]; progressD
           <div className="p-8 text-center text-muted text-sm">No users yet.</div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Engagement View ───────────────────────────────────────────────────────────
+
+const SOURCE_LABEL: Record<string, string> = {
+  weekly: 'Weekly',
+  library: 'Library',
+  dashboard: 'Dashboard',
+  other: 'Direct',
+}
+
+function EngagementView({
+  users,
+  progressData,
+  views,
+}: {
+  users: Profile[]
+  progressData: ProgressRawData
+  views: ViewRecord[]
+}) {
+  const [selectedWeek, setSelectedWeek] = useState<string>(WEEKS[0])
+  const [expandedUser, setExpandedUser] = useState<string | null>(null)
+
+  // Required materials for the selected week
+  const weekMaterials = progressData.materials.filter(m => m.week === selectedWeek)
+  const requiredMaterials = weekMaterials.filter(m => {
+    const t = normalizeTier(m.material_tier)
+    return t === 'mustread' || t === 'core'
+  })
+  const requiredIds = new Set(requiredMaterials.map(m => m.id))
+
+  // Per-user engagement stats (non-admin users only)
+  const userStats = users
+    .filter(u => u.role !== 'admin')
+    .map(user => {
+      // Views for this user that correspond to a required material in this week
+      const userViews = views.filter(
+        v => v.user_id === user.id && requiredIds.has(v.material_id)
+      )
+      const viewedIds = new Set(userViews.map(v => v.material_id))
+      const viewedCount = viewedIds.size
+
+      // First time they opened any material in this week
+      const firstView = userViews.length > 0
+        ? userViews.reduce((min, v) =>
+            new Date(v.viewed_at) < new Date(min.viewed_at) ? v : min
+          )
+        : null
+
+      // Unique sources used
+      const sources = [...new Set(userViews.map(v => v.source))]
+
+      // Per-material detail: first view timestamp + source for each required material
+      const materialDetail = requiredMaterials.map(mat => {
+        const matViews = userViews
+          .filter(v => v.material_id === mat.id)
+          .sort((a, b) => new Date(a.viewed_at).getTime() - new Date(b.viewed_at).getTime())
+        const first = matViews[0] ?? null
+        return { mat, first }
+      })
+
+      return { user, viewedCount, total: requiredMaterials.length, firstView, sources, materialDetail }
+    })
+    .sort((a, b) => b.viewedCount - a.viewedCount)
+
+  const totalRequired = requiredMaterials.length
+
+  return (
+    <div>
+      {/* Week selector */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {WEEKS.map(week => (
+          <button
+            key={week}
+            onClick={() => { setSelectedWeek(week); setExpandedUser(null) }}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              selectedWeek === week
+                ? 'bg-primary text-white shadow-sm'
+                : 'bg-gray-100 text-muted hover:text-gray-700'
+            }`}
+          >
+            {week}
+          </button>
+        ))}
+      </div>
+
+      {totalRequired === 0 ? (
+        <div className="bg-card rounded-xl border border-border p-8 text-center text-muted text-sm">
+          No required materials (Must Read / Core) assigned to {selectedWeek} yet.
+        </div>
+      ) : (
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          {/* Header row */}
+          <div className="bg-gray-50 border-b border-border px-5 py-3 flex items-center gap-2">
+            <span className="text-xs font-medium text-muted uppercase tracking-wider flex-1">
+              Member
+            </span>
+            <span className="text-xs font-medium text-muted uppercase tracking-wider w-36 text-center">
+              Required viewed
+            </span>
+            <span className="text-xs font-medium text-muted uppercase tracking-wider w-28 hidden sm:block">
+              First opened
+            </span>
+            <span className="text-xs font-medium text-muted uppercase tracking-wider w-24 hidden md:block">
+              Via
+            </span>
+            <span className="w-5" />
+          </div>
+
+          {userStats.length === 0 && (
+            <div className="p-8 text-center text-muted text-sm">No members to show.</div>
+          )}
+
+          {userStats.map(({ user, viewedCount, total, firstView, sources, materialDetail }) => {
+            const allViewed = total > 0 && viewedCount === total
+            const noneViewed = viewedCount === 0
+            const isExpanded = expandedUser === user.id
+
+            return (
+              <div key={user.id} className="border-b border-border last:border-0">
+                {/* Main row */}
+                <div
+                  className="flex items-center gap-2 px-5 py-3 cursor-pointer hover:bg-gray-50/50"
+                  onClick={() => setExpandedUser(isExpanded ? null : user.id)}
+                >
+                  {/* User */}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium flex-shrink-0">
+                      {(user.full_name || user.email).charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {user.full_name || '—'}
+                      </p>
+                      <p className="text-xs text-muted truncate">{user.email}</p>
+                    </div>
+                  </div>
+
+                  {/* Progress pill */}
+                  <div className="w-36 flex items-center gap-2">
+                    <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${
+                          allViewed ? 'bg-green-500' : noneViewed ? 'bg-gray-300' : 'bg-amber-400'
+                        }`}
+                        style={{ width: total > 0 ? `${(viewedCount / total) * 100}%` : '0%' }}
+                      />
+                    </div>
+                    <span className={`text-xs font-semibold w-10 text-right ${
+                      allViewed ? 'text-green-600' : noneViewed ? 'text-gray-400' : 'text-amber-600'
+                    }`}>
+                      {viewedCount}/{total}
+                    </span>
+                  </div>
+
+                  {/* First opened */}
+                  <div className="w-28 hidden sm:block">
+                    <span className="text-xs text-muted">
+                      {firstView
+                        ? new Date(firstView.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : <span className="text-gray-300">—</span>
+                      }
+                    </span>
+                  </div>
+
+                  {/* Source badges */}
+                  <div className="w-24 hidden md:flex flex-wrap gap-1">
+                    {sources.length > 0
+                      ? sources.map(s => (
+                          <span key={s} className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                            {SOURCE_LABEL[s] ?? s}
+                          </span>
+                        ))
+                      : <span className="text-xs text-gray-300">—</span>
+                    }
+                  </div>
+
+                  {/* Chevron */}
+                  <svg
+                    className={`w-4 h-4 text-muted flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+
+                {/* Expanded: per-material breakdown */}
+                {isExpanded && (
+                  <div className="bg-gray-50 border-t border-border px-5 py-4">
+                    <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+                      Required materials — {selectedWeek}
+                    </p>
+                    <div className="space-y-2">
+                      {materialDetail.map(({ mat, first }) => (
+                        <div key={mat.id} className="flex items-start gap-3">
+                          {/* Viewed indicator */}
+                          <div className={`mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            first ? 'bg-green-100 text-green-600' : 'bg-gray-200 text-gray-400'
+                          }`}>
+                            {first ? (
+                              <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            ) : (
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 block" />
+                            )}
+                          </div>
+
+                          {/* Title + meta */}
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm truncate ${first ? 'text-gray-900' : 'text-gray-400'}`}>
+                              {mat.title ?? mat.id}
+                            </p>
+                            {first && (
+                              <p className="text-xs text-muted mt-0.5">
+                                First opened{' '}
+                                {new Date(first.viewed_at).toLocaleDateString('en-US', {
+                                  month: 'short', day: 'numeric', year: 'numeric',
+                                })}{' '}
+                                · via {SOURCE_LABEL[first.source] ?? first.source}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Tier badge */}
+                          <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
+                            normalizeTier(mat.material_tier) === 'mustread'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {normalizeTier(mat.material_tier) === 'mustread' ? 'Must Read' : 'Core'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
