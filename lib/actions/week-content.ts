@@ -7,8 +7,8 @@ import { revalidatePath } from 'next/cache'
 export async function updateWeekContent(
   week: string,
   fields: {
-    title?: string
-    description?: string
+    title?: string | null
+    description?: string | null
     objectives?: string
     homework?: string
     deliverable_prompt?: string
