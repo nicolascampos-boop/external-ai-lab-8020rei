@@ -284,6 +284,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
       {isAdmin && (
         <div className="mb-4">
           <WeekEditForm
+            key={currentWeek}
             week={currentWeek}
             initialTitle={weekContent?.title ?? ''}
             initialDescription={weekContent?.description ?? ''}
