@@ -34,8 +34,8 @@ export default function WeekEditForm({
   function handleSave() {
     startTransition(async () => {
       const result = await updateWeekContent(week, {
-        title: title.trim() || undefined,
-        description: description.trim() || undefined,
+        title: title.trim() || null,
+        description: description.trim() || null,
         objectives,
         homework,
         deliverable_prompt: deliverablePrompt,
