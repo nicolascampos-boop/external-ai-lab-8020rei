@@ -6,6 +6,7 @@ import WeekLockToggle from '@/components/week-lock-toggle'
 import DeliverableForm from '@/components/deliverable-form'
 import MemberResourcesSection from '@/components/member-resources-section'
 import WeekSessionsSection from '@/components/week-sessions-section'
+import SubmissionCard from '@/components/submission-card'
 import Link from 'next/link'
 import { WEEKS, WEEK_DESCRIPTIONS } from '@/lib/supabase/types'
 
@@ -47,6 +48,7 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
     { data: allDeliverables },
     { data: memberResources },
     { data: weekSessions },
+    { data: allReactions },
   ] = await Promise.all([
     supabase
       .from('material_scores')
@@ -90,9 +92,24 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
       .eq('week', currentWeek)
       .order('session_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true }),
+    // Reactions for all deliverables in this week
+    supabase
+      .from('deliverable_reactions')
+      .select('deliverable_id, reaction, user_id'),
   ])
 
   const userDeliverable = userDeliverableResult.data ?? null
+
+  // Index reactions by deliverable_id for O(1) lookups in the render
+  const reactionsByDeliverable: Record<string, { likes: number; dislikes: number; userReaction: 'like' | 'dislike' | null }> = {}
+  for (const r of allReactions ?? []) {
+    if (!reactionsByDeliverable[r.deliverable_id]) {
+      reactionsByDeliverable[r.deliverable_id] = { likes: 0, dislikes: 0, userReaction: null }
+    }
+    if (r.reaction === 'like') reactionsByDeliverable[r.deliverable_id].likes++
+    else reactionsByDeliverable[r.deliverable_id].dislikes++
+    if (user && r.user_id === user.id) reactionsByDeliverable[r.deliverable_id].userReaction = r.reaction as 'like' | 'dislike'
+  }
 
   // Build enabled-week set — Reference is always enabled as a fallback
   const enabledWeeks = new Set<string>(
@@ -500,39 +517,16 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {(allDeliverables as any[]).map(d => {
                     const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles
+                    const rxn = reactionsByDeliverable[d.id] ?? { likes: 0, dislikes: 0, userReaction: null }
                     return (
-                      <div key={d.id} className="flex items-start gap-3 py-3 border-b border-border last:border-0">
-                        <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">
-                          {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <p className="text-sm font-medium text-gray-700">
-                              {profile?.full_name || profile?.email || 'Unknown'}
-                            </p>
-                            <span className="text-xs text-muted">
-                              {new Date(d.submitted_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })}
-                            </span>
-                          </div>
-                          {d.link && (
-                            <a
-                              href={d.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline truncate block"
-                            >
-                              {d.link}
-                            </a>
-                          )}
-                          {d.notes && (
-                            <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap line-clamp-4">{d.notes}</p>
-                          )}
-                        </div>
-                      </div>
+                      <SubmissionCard
+                        key={d.id}
+                        deliverable={{ ...d, profiles: profile }}
+                        likeCount={rxn.likes}
+                        dislikeCount={rxn.dislikes}
+                        userReaction={rxn.userReaction}
+                        isAuthenticated={!!user}
+                      />
                     )
                   })}
                 </div>
