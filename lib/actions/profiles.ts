@@ -78,9 +78,15 @@ export async function deleteUser(userId: string) {
     return { error: `Failed to delete profile: ${profileError.message}` }
   }
 
-  // Also delete the user from auth.users via admin client
-  const admin = createAdminClient()
-  await admin.auth.admin.deleteUser(userId)
+  // Also delete the user from auth.users via admin client (best-effort)
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const admin = createAdminClient()
+      await admin.auth.admin.deleteUser(userId)
+    } catch {
+      console.error('Failed to delete user from auth.users — profile already removed')
+    }
+  }
 
   revalidatePath('/admin')
 
@@ -88,6 +94,10 @@ export async function deleteUser(userId: string) {
 }
 
 export async function getOrphanedAuthUsers() {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { error: 'Service role key not configured', orphaned: [] as OrphanedUser[] }
+  }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated', orphaned: [] as OrphanedUser[] }
@@ -95,23 +105,27 @@ export async function getOrphanedAuthUsers() {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if (profile?.role !== 'admin') return { error: 'Admin access required', orphaned: [] as OrphanedUser[] }
 
-  const admin = createAdminClient()
-  const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 })
-  if (error) return { error: error.message, orphaned: [] as OrphanedUser[] }
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 })
+    if (error) return { error: error.message, orphaned: [] as OrphanedUser[] }
 
-  const { data: profiles } = await supabase.from('profiles').select('id')
-  const profileIds = new Set((profiles ?? []).map((p: { id: string }) => p.id))
+    const { data: profiles } = await supabase.from('profiles').select('id')
+    const profileIds = new Set((profiles ?? []).map((p: { id: string }) => p.id))
 
-  const orphaned: OrphanedUser[] = data.users
-    .filter(u => !profileIds.has(u.id))
-    .map(u => ({
-      id: u.id,
-      email: u.email ?? '',
-      full_name: (u.user_metadata?.full_name || u.user_metadata?.name || null) as string | null,
-      created_at: u.created_at,
-    }))
+    const orphaned: OrphanedUser[] = data.users
+      .filter(u => !profileIds.has(u.id))
+      .map(u => ({
+        id: u.id,
+        email: u.email ?? '',
+        full_name: (u.user_metadata?.full_name || u.user_metadata?.name || null) as string | null,
+        created_at: u.created_at,
+      }))
 
-  return { orphaned }
+    return { orphaned }
+  } catch {
+    return { error: 'Failed to connect to admin API', orphaned: [] as OrphanedUser[] }
+  }
 }
 
 export interface OrphanedUser {
