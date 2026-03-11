@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { deleteUser, updateUserRole, createMissingProfile } from '@/lib/actions/profiles'
+import { adminRecordView, adminRemoveViews, adminUpsertVote, adminRemoveVote, adminUpsertDeliverable, adminRemoveDeliverable } from '@/lib/actions/admin-progress'
 import type { OrphanedUser } from '@/lib/actions/profiles'
 import type { Profile, MaterialWithScores } from '@/lib/supabase/types'
 import { WEEKS } from '@/lib/supabase/types'
@@ -401,6 +402,9 @@ function UnifiedProgressView({
 }) {
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null)
+  const [editingUser, setEditingUser] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const router = useRouter()
 
   // Required materials per week (Must Read / Core only)
   const weekRequiredMaterials: Record<string, typeof progressData.materials> = {}
@@ -518,8 +522,12 @@ function UnifiedProgressView({
   const overallPct = globalTotalRequired > 0 ? Math.round((globalTotalOpened / globalTotalRequired) * 100) : 0
   const avgReadsPerWeek = (members.length > 0 && activeWeeks.length > 0) ? (globalTotalOpened / members.length / activeWeeks.length).toFixed(1) : '0'
 
-  // Ranked members
-  const memberRanking = members.map(u => ({ user: u, ...getUserTotalScore(u.id) })).sort((a, b) => b.engagementScore - a.engagementScore)
+  // Ranked members — sort by % of materials opened, tiebreak by engagement breadth
+  const memberRanking = members.map(u => {
+    const s = getUserTotalScore(u.id)
+    const pct = s.total > 0 ? s.opened / s.total : 0
+    return { user: u, ...s, pct }
+  }).sort((a, b) => b.pct - a.pct || b.engagementScore - a.engagementScore)
 
   // Top reviewed materials (by vote count + avg score)
   const materialVoteCounts: Record<string, { title: string; tier: string | null; voteCount: number; totalQuality: number; totalRelevance: number }> = {}
@@ -573,7 +581,7 @@ function UnifiedProgressView({
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-5 py-4 border-b border-border">
             <h3 className="text-sm font-semibold text-gray-900">Member Leaderboard</h3>
-            <p className="text-xs text-muted">Ranked by total engagement (reads + scores + comments + deliverables)</p>
+            <p className="text-xs text-muted">Ranked by % of required materials opened</p>
           </div>
           <div className="divide-y divide-border">
             {memberRanking.slice(0, 8).map((m, i) => {
@@ -775,55 +783,98 @@ function UnifiedProgressView({
                             <span className="text-xs text-muted">
                               {stats.opened}/{stats.total} opened · {stats.scored}/{stats.total} scored · {stats.commented}/{stats.total} commented
                             </span>
-                            {stats.opened === stats.total && stats.total > 0 ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">All Read</span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{stats.total > 0 ? Math.round((stats.opened / stats.total) * 100) : 0}%</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {stats.opened === stats.total && stats.total > 0 ? (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">All Read</span>
+                              ) : (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{stats.total > 0 ? Math.round((stats.opened / stats.total) * 100) : 0}%</span>
+                              )}
+                              <button
+                                onClick={() => setEditingUser(editingUser === user.id ? null : user.id)}
+                                className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                                  editingUser === user.id
+                                    ? 'bg-primary text-white border-primary'
+                                    : 'bg-white text-muted border-gray-200 hover:border-gray-400'
+                                }`}
+                              >
+                                {editingUser === user.id ? 'Done Editing' : 'Edit'}
+                              </button>
+                            </div>
                           </div>
 
                           {/* Material list */}
                           <div className="divide-y divide-gray-50">
                             {required.map(mat => {
                               const detail = getMaterialDetail(user.id, mat.id)
+                              const isEditing = editingUser === user.id
                               return (
-                                <div key={mat.id} className="px-4 py-2.5 flex items-start gap-3">
-                                  <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${detail.viewCount > 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                  <div className="flex-1 min-w-0">
-                                    <p className={`text-sm ${detail.viewCount > 0 ? 'text-gray-900' : 'text-gray-400'}`}>{mat.title || mat.id}</p>
-                                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${normalizeTier(mat.material_tier) === 'mustread' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{tierLabel(mat.material_tier)}</span>
-                                      {detail.viewCount > 0 ? (
-                                        <span className="text-[10px] text-muted">
-                                          {detail.viewCount} view{detail.viewCount > 1 ? 's' : ''}
-                                          {detail.firstView && <> · {new Date(detail.firstView.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>}
-                                          {detail.reopened && detail.lastView && <> · <span className="text-blue-600">reopened {new Date(detail.lastView.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></>}
-                                        </span>
-                                      ) : <span className="text-[10px] text-gray-400">Not opened</span>}
-                                      {detail.vote ? (
-                                        <span className="text-[10px] text-purple-600">{((detail.vote.quality_score + detail.vote.relevance_score) / 2).toFixed(1)}/5</span>
-                                      ) : <span className="text-[10px] text-gray-400">No score</span>}
-                                      {detail.vote?.comment && detail.vote.comment.trim() !== '' ? (
-                                        <span className="text-[10px] text-amber-600">Commented</span>
-                                      ) : <span className="text-[10px] text-gray-400">No comment</span>}
+                                <div key={mat.id} className="px-4 py-2.5">
+                                  <div className="flex items-start gap-3">
+                                    <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${detail.viewCount > 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                    <div className="flex-1 min-w-0">
+                                      <p className={`text-sm ${detail.viewCount > 0 ? 'text-gray-900' : 'text-gray-400'}`}>{mat.title || mat.id}</p>
+                                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${normalizeTier(mat.material_tier) === 'mustread' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{tierLabel(mat.material_tier)}</span>
+                                        {detail.viewCount > 0 ? (
+                                          <span className="text-[10px] text-muted">
+                                            {detail.viewCount} view{detail.viewCount > 1 ? 's' : ''}
+                                            {detail.firstView && <> · {new Date(detail.firstView.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>}
+                                            {detail.reopened && detail.lastView && <> · <span className="text-blue-600">reopened {new Date(detail.lastView.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></>}
+                                          </span>
+                                        ) : <span className="text-[10px] text-gray-400">Not opened</span>}
+                                        {detail.vote ? (
+                                          <span className="text-[10px] text-purple-600">{((detail.vote.quality_score + detail.vote.relevance_score) / 2).toFixed(1)}/5</span>
+                                        ) : <span className="text-[10px] text-gray-400">No score</span>}
+                                        {detail.vote?.comment && detail.vote.comment.trim() !== '' ? (
+                                          <span className="text-[10px] text-amber-600">Commented</span>
+                                        ) : <span className="text-[10px] text-gray-400">No comment</span>}
+                                      </div>
                                     </div>
                                   </div>
+
+                                  {/* Inline edit controls */}
+                                  {isEditing && (
+                                    <MaterialEditRow
+                                      userId={user.id}
+                                      materialId={mat.id}
+                                      materialWeek={currentWeek}
+                                      hasView={detail.viewCount > 0}
+                                      existingVote={detail.vote}
+                                      saving={saving}
+                                      setSaving={setSaving}
+                                      onDone={() => router.refresh()}
+                                    />
+                                  )}
                                 </div>
                               )
                             })}
                           </div>
 
                           {/* Footer: deliverable + sessions */}
-                          <div className="px-4 py-2.5 border-t border-gray-100 flex flex-wrap gap-x-4 gap-y-1">
-                            {deliverable ? (
-                              <span className="text-xs text-green-700">
-                                Delivered {new Date(deliverable.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                {deliverable.link && <a href={deliverable.link} target="_blank" rel="noopener noreferrer" className="ml-1 underline hover:text-green-900">Link</a>}
-                              </span>
-                            ) : <span className="text-xs text-gray-400">Deliverable pending</span>}
-                            {sessions.length > 0 ? (
-                              <span className="text-xs text-muted">Sessions: {sessions.map(s => SESSION_TYPE_LABEL[s.session_type] || s.title).join(', ')}</span>
-                            ) : <span className="text-xs text-gray-400">No sessions</span>}
+                          <div className="px-4 py-2.5 border-t border-gray-100">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1">
+                              {deliverable ? (
+                                <span className="text-xs text-green-700">
+                                  Delivered {new Date(deliverable.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  {deliverable.link && <a href={deliverable.link} target="_blank" rel="noopener noreferrer" className="ml-1 underline hover:text-green-900">Link</a>}
+                                </span>
+                              ) : <span className="text-xs text-gray-400">Deliverable pending</span>}
+                              {sessions.length > 0 ? (
+                                <span className="text-xs text-muted">Sessions: {sessions.map(s => SESSION_TYPE_LABEL[s.session_type] || s.title).join(', ')}</span>
+                              ) : <span className="text-xs text-gray-400">No sessions</span>}
+                            </div>
+
+                            {/* Deliverable edit controls */}
+                            {editingUser === user.id && (
+                              <DeliverableEditRow
+                                userId={user.id}
+                                week={currentWeek}
+                                existingDeliverable={deliverable}
+                                saving={saving}
+                                setSaving={setSaving}
+                                onDone={() => router.refresh()}
+                              />
+                            )}
                           </div>
                         </div>
                       )
@@ -834,6 +885,179 @@ function UnifiedProgressView({
             )
           })}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Inline edit components ──────────────────────────────────────────────────
+
+function MaterialEditRow({
+  userId, materialId, materialWeek, hasView, existingVote, saving, setSaving, onDone,
+}: {
+  userId: string
+  materialId: string
+  materialWeek: string
+  hasView: boolean
+  existingVote: { quality_score: number; relevance_score: number; comment: string | null } | null
+  saving: boolean
+  setSaving: (v: boolean) => void
+  onDone: () => void
+}) {
+  const [quality, setQuality] = useState(existingVote?.quality_score ?? 0)
+  const [relevance, setRelevance] = useState(existingVote?.relevance_score ?? 0)
+  const [comment, setComment] = useState(existingVote?.comment ?? '')
+
+  async function toggleView() {
+    setSaving(true)
+    if (hasView) {
+      await adminRemoveViews(userId, materialId)
+    } else {
+      await adminRecordView(userId, materialId, materialWeek)
+    }
+    setSaving(false)
+    onDone()
+  }
+
+  async function saveScore() {
+    if (quality < 1 || quality > 5 || relevance < 1 || relevance > 5) return
+    setSaving(true)
+    await adminUpsertVote(userId, materialId, quality, relevance, comment || undefined)
+    setSaving(false)
+    onDone()
+  }
+
+  async function removeScore() {
+    setSaving(true)
+    await adminRemoveVote(userId, materialId)
+    setQuality(0)
+    setRelevance(0)
+    setComment('')
+    setSaving(false)
+    onDone()
+  }
+
+  return (
+    <div className="mt-2 ml-5 pl-3 border-l-2 border-primary/20 space-y-2">
+      {/* View toggle */}
+      <div className="flex items-center gap-2">
+        <button
+          disabled={saving}
+          onClick={toggleView}
+          className={`text-[10px] px-2 py-0.5 rounded border transition-colors disabled:opacity-50 ${
+            hasView
+              ? 'bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+              : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200'
+          }`}
+        >
+          {hasView ? 'Remove view' : 'Mark as opened'}
+        </button>
+      </div>
+
+      {/* Score inputs */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-[10px] text-muted">Quality:</label>
+        <select value={quality} onChange={e => setQuality(Number(e.target.value))} className="text-[10px] border border-gray-200 rounded px-1.5 py-0.5 bg-white">
+          <option value={0}>—</option>
+          {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <label className="text-[10px] text-muted">Relevance:</label>
+        <select value={relevance} onChange={e => setRelevance(Number(e.target.value))} className="text-[10px] border border-gray-200 rounded px-1.5 py-0.5 bg-white">
+          <option value={0}>—</option>
+          {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <input
+          type="text"
+          placeholder="Comment (optional)"
+          value={comment}
+          onChange={e => setComment(e.target.value)}
+          className="text-[10px] border border-gray-200 rounded px-2 py-0.5 flex-1 min-w-[120px]"
+        />
+        <button
+          disabled={saving || quality < 1 || relevance < 1}
+          onClick={saveScore}
+          className="text-[10px] px-2 py-0.5 rounded bg-primary text-white hover:bg-primary-dark disabled:opacity-40 transition-colors"
+        >
+          {existingVote ? 'Update Score' : 'Add Score'}
+        </button>
+        {existingVote && (
+          <button
+            disabled={saving}
+            onClick={removeScore}
+            className="text-[10px] px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DeliverableEditRow({
+  userId, week, existingDeliverable, saving, setSaving, onDone,
+}: {
+  userId: string
+  week: string
+  existingDeliverable: { link: string | null; notes: string | null; submitted_at: string } | undefined
+  saving: boolean
+  setSaving: (v: boolean) => void
+  onDone: () => void
+}) {
+  const [link, setLink] = useState(existingDeliverable?.link ?? '')
+  const [notes, setNotes] = useState(existingDeliverable?.notes ?? '')
+
+  async function saveDeliverable() {
+    if (!link.trim() && !notes.trim()) return
+    setSaving(true)
+    await adminUpsertDeliverable(userId, week, link || undefined, notes || undefined)
+    setSaving(false)
+    onDone()
+  }
+
+  async function removeDeliverable() {
+    setSaving(true)
+    await adminRemoveDeliverable(userId, week)
+    setLink('')
+    setNotes('')
+    setSaving(false)
+    onDone()
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+      <p className="text-[10px] font-medium text-muted">Edit Deliverable</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="url"
+          placeholder="Deliverable link (https://...)"
+          value={link}
+          onChange={e => setLink(e.target.value)}
+          className="text-[10px] border border-gray-200 rounded px-2 py-0.5 flex-1 min-w-[160px]"
+        />
+        <input
+          type="text"
+          placeholder="Notes (optional)"
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          className="text-[10px] border border-gray-200 rounded px-2 py-0.5 flex-1 min-w-[120px]"
+        />
+        <button
+          disabled={saving || (!link.trim() && !notes.trim())}
+          onClick={saveDeliverable}
+          className="text-[10px] px-2 py-0.5 rounded bg-primary text-white hover:bg-primary-dark disabled:opacity-40 transition-colors"
+        >
+          {existingDeliverable ? 'Update' : 'Add Deliverable'}
+        </button>
+        {existingDeliverable && (
+          <button
+            disabled={saving}
+            onClick={removeDeliverable}
+            className="text-[10px] px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors"
+          >
+            Remove
+          </button>
+        )}
       </div>
     </div>
   )
