@@ -10,8 +10,9 @@ import { WEEKS } from '@/lib/supabase/types'
 
 interface ProgressRawData {
   materials: { id: string; week: string | null; material_tier: string | null; title?: string | null }[]
-  votes: { user_id: string; material_id: string; comment: string | null }[]
-  deliverables: { user_id: string; week: string }[]
+  votes: { user_id: string; material_id: string; comment: string | null; quality_score: number; relevance_score: number }[]
+  deliverables: { user_id: string; week: string; link: string | null; notes: string | null; submitted_at: string }[]
+  sessions: { week: string; title: string; link: string; session_type: string }[]
 }
 
 interface ViewRecord {
@@ -376,11 +377,17 @@ function normalizeTier(tier: string | null | undefined): string {
   return tier.toLowerCase().replace(/[\s_-]+/g, '')
 }
 
-interface WeekIndicators {
-  opened: boolean
-  commented: boolean
-  scored: boolean
-  delivered: boolean
+function tierLabel(tier: string | null | undefined): string {
+  const t = normalizeTier(tier)
+  if (t === 'mustread') return 'Must Read'
+  if (t === 'core') return 'Core'
+  return tier || ''
+}
+
+const SESSION_TYPE_LABEL: Record<string, string> = {
+  weekly: 'Weekly Session',
+  team: 'Team Session',
+  speaker: 'Speaker Session',
 }
 
 function UnifiedProgressView({
@@ -394,91 +401,178 @@ function UnifiedProgressView({
 }) {
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
 
-  // Only track weeks that have required materials (Must Read / Core)
-  const weekRequiredMaterials: Record<string, string[]> = {}
+  // Required materials per week (Must Read / Core only)
+  const weekRequiredMaterials: Record<string, typeof progressData.materials> = {}
   for (const week of WEEKS) {
-    const ids = progressData.materials
-      .filter(m => {
-        if (m.week !== week) return false
-        const t = normalizeTier(m.material_tier)
-        return t === 'mustread' || t === 'core'
-      })
-      .map(m => m.id)
-    if (ids.length > 0) weekRequiredMaterials[week] = ids
+    const mats = progressData.materials.filter(m => {
+      if (m.week !== week) return false
+      const t = normalizeTier(m.material_tier)
+      return t === 'mustread' || t === 'core'
+    })
+    if (mats.length > 0) weekRequiredMaterials[week] = mats
   }
   const activeWeeks = Object.keys(weekRequiredMaterials)
 
-  // Members only (no admins)
+  // Sessions grouped by week
+  const weekSessions: Record<string, typeof progressData.sessions> = {}
+  progressData.sessions.forEach(s => {
+    if (!weekSessions[s.week]) weekSessions[s.week] = []
+    weekSessions[s.week].push(s)
+  })
+
+  // Members only
   const members = users.filter(u => u.role !== 'admin')
 
-  // Pre-compute per-user indicators for each active week
-  const userProgressMap: Record<string, Record<string, WeekIndicators>> = {}
-
-  members.forEach(user => {
-    const userVotes = progressData.votes.filter(v => v.user_id === user.id)
-    const userScoredIds = new Set(userVotes.map(v => v.material_id))
-    const userCommentedIds = new Set(
-      userVotes.filter(v => v.comment && v.comment.trim() !== '').map(v => v.material_id)
-    )
-    const userDeliverableWeeks = new Set(
-      progressData.deliverables.filter(d => d.user_id === user.id).map(d => d.week)
-    )
-    const userViewedIds = new Set(views.filter(v => v.user_id === user.id).map(v => v.material_id))
-
-    const weekMap: Record<string, WeekIndicators> = {}
-    for (const week of activeWeeks) {
-      const required = weekRequiredMaterials[week]
-      const opened = required.some(id => userViewedIds.has(id))
-      const commented = required.some(id => userCommentedIds.has(id))
-      const scored = required.some(id => userScoredIds.has(id))
-      const delivered = userDeliverableWeeks.has(week)
-      weekMap[week] = { opened, commented, scored, delivered }
-    }
-    userProgressMap[user.id] = weekMap
+  // Build per-user lookup maps
+  const userViewsMap: Record<string, ViewRecord[]> = {}
+  views.forEach(v => {
+    if (!userViewsMap[v.user_id]) userViewsMap[v.user_id] = []
+    userViewsMap[v.user_id].push(v)
   })
 
-  // Aggregate metrics
-  const totalIndicators = members.length * activeWeeks.length * 4
-  let totalChecked = 0
-  const weekEngagement: Record<string, number> = {}
-  for (const week of activeWeeks) weekEngagement[week] = 0
-  let fullyComplete = 0
-
-  members.forEach(user => {
-    let allComplete = true
-    for (const week of activeWeeks) {
-      const ind = userProgressMap[user.id]?.[week]
-      if (!ind) { allComplete = false; continue }
-      const count = [ind.opened, ind.commented, ind.scored, ind.delivered].filter(Boolean).length
-      totalChecked += count
-      weekEngagement[week] += count
-      if (count < 4) allComplete = false
-    }
-    if (allComplete && activeWeeks.length > 0) fullyComplete++
+  const userVotesMap: Record<string, typeof progressData.votes> = {}
+  progressData.votes.forEach(v => {
+    if (!userVotesMap[v.user_id]) userVotesMap[v.user_id] = []
+    userVotesMap[v.user_id].push(v)
   })
 
-  const overallPct = totalIndicators > 0 ? Math.round((totalChecked / totalIndicators) * 100) : 0
-  const maxPerWeek = members.length * 4
+  const userDeliverablesMap: Record<string, Record<string, typeof progressData.deliverables[0]>> = {}
+  progressData.deliverables.forEach(d => {
+    if (!userDeliverablesMap[d.user_id]) userDeliverablesMap[d.user_id] = {}
+    userDeliverablesMap[d.user_id][d.week] = d
+  })
 
-  // Most active week
-  let mostActiveWeek = activeWeeks[0] || ''
-  let maxEngagement = 0
-  for (const week of activeWeeks) {
-    if (weekEngagement[week] > maxEngagement) {
-      maxEngagement = weekEngagement[week]
-      mostActiveWeek = week
+  // Per-user, per-week: how many required materials opened, scored, commented
+  type UserWeekStats = {
+    opened: number
+    scored: number
+    commented: number
+    total: number
+    delivered: boolean
+    deliverableLink: string | null
+    deliverableDate: string | null
+  }
+
+  function getUserWeekStats(userId: string, week: string): UserWeekStats {
+    const required = weekRequiredMaterials[week] || []
+    const requiredIds = new Set(required.map(m => m.id))
+    const uViews = userViewsMap[userId] || []
+    const uVotes = userVotesMap[userId] || []
+    const deliverable = userDeliverablesMap[userId]?.[week]
+
+    const openedIds = new Set(uViews.filter(v => requiredIds.has(v.material_id)).map(v => v.material_id))
+    const scoredIds = new Set(uVotes.filter(v => requiredIds.has(v.material_id)).map(v => v.material_id))
+    const commentedIds = new Set(
+      uVotes.filter(v => requiredIds.has(v.material_id) && v.comment && v.comment.trim() !== '').map(v => v.material_id)
+    )
+
+    return {
+      opened: openedIds.size,
+      scored: scoredIds.size,
+      commented: commentedIds.size,
+      total: required.length,
+      delivered: !!deliverable,
+      deliverableLink: deliverable?.link || null,
+      deliverableDate: deliverable?.submitted_at || null,
     }
   }
 
-  // Per-user overall progress
-  function getUserOverall(userId: string) {
-    let checked = 0
-    for (const week of activeWeeks) {
-      const ind = userProgressMap[userId]?.[week]
-      if (ind) checked += [ind.opened, ind.commented, ind.scored, ind.delivered].filter(Boolean).length
+  // Per-material detail for a user in a week
+  function getMaterialDetail(userId: string, materialId: string) {
+    const uViews = (userViewsMap[userId] || []).filter(v => v.material_id === materialId)
+    const uVote = (userVotesMap[userId] || []).find(v => v.material_id === materialId)
+    const viewCount = uViews.length
+    const firstView = uViews.length > 0
+      ? uViews.reduce((min, v) => new Date(v.viewed_at) < new Date(min.viewed_at) ? v : min)
+      : null
+    const lastView = uViews.length > 1
+      ? uViews.reduce((max, v) => new Date(v.viewed_at) > new Date(max.viewed_at) ? v : max)
+      : null
+    const reopened = viewCount > 1
+
+    return { viewCount, firstView, lastView, reopened, vote: uVote || null }
+  }
+
+  // ─── Aggregate metrics ──────────────────────────────────────────────────────
+
+  // Overall progress based on materials opened (the most meaningful metric)
+  let totalRequired = 0
+  let totalOpened = 0
+  let totalScored = 0
+  let totalCommented = 0
+  let totalDelivered = 0
+
+  const weekStats: Record<string, { avgOpened: number; scoredMembers: number; commentedMembers: number; deliveredMembers: number }> = {}
+
+  activeWeeks.forEach(week => {
+    const requiredCount = weekRequiredMaterials[week].length
+    let weekOpened = 0
+    let weekScored = 0
+    let weekCommented = 0
+    let weekDelivered = 0
+
+    members.forEach(user => {
+      const stats = getUserWeekStats(user.id, week)
+      totalRequired += stats.total
+      totalOpened += stats.opened
+      totalScored += stats.scored
+      totalCommented += stats.commented
+      if (stats.delivered) totalDelivered++
+
+      weekOpened += stats.opened
+      if (stats.scored > 0) weekScored++
+      if (stats.commented > 0) weekCommented++
+      if (stats.delivered) weekDelivered++
+    })
+
+    weekStats[week] = {
+      avgOpened: members.length > 0 ? weekOpened / members.length : 0,
+      scoredMembers: weekScored,
+      commentedMembers: weekCommented,
+      deliveredMembers: weekDelivered,
     }
-    const total = activeWeeks.length * 4
-    return { checked, total, pct: total > 0 ? Math.round((checked / total) * 100) : 0 }
+  })
+
+  const overallPct = totalRequired > 0 ? Math.round((totalOpened / totalRequired) * 100) : 0
+  const avgReadsPerWeek = (members.length > 0 && activeWeeks.length > 0)
+    ? (totalOpened / members.length / activeWeeks.length).toFixed(1)
+    : '0'
+
+  // Most engaged user = highest total (opened + scored + commented + deliverables)
+  let mostEngagedName = '—'
+  let mostEngagedScore = 0
+  members.forEach(user => {
+    let score = 0
+    activeWeeks.forEach(week => {
+      const s = getUserWeekStats(user.id, week)
+      score += s.opened + s.scored + s.commented + (s.delivered ? 1 : 0)
+    })
+    if (score > mostEngagedScore) {
+      mostEngagedScore = score
+      mostEngagedName = user.full_name || user.email
+    }
+  })
+
+  // Fully complete = all required materials opened + scored + deliverable submitted per week
+  let fullyComplete = 0
+  members.forEach(user => {
+    const allDone = activeWeeks.every(week => {
+      const s = getUserWeekStats(user.id, week)
+      return s.opened === s.total && s.scored === s.total && s.delivered
+    })
+    if (allDone) fullyComplete++
+  })
+
+  // Per-user overall progress (materials opened / total required)
+  function getUserOverallPct(userId: string) {
+    let opened = 0
+    let total = 0
+    activeWeeks.forEach(week => {
+      const s = getUserWeekStats(userId, week)
+      opened += s.opened
+      total += s.total
+    })
+    return total > 0 ? Math.round((opened / total) * 100) : 0
   }
 
   return (
@@ -488,44 +582,71 @@ function UnifiedProgressView({
         <div className="bg-card rounded-xl border border-border p-5">
           <p className="text-xs font-medium text-muted uppercase tracking-wider mb-1">Overall Progress</p>
           <p className="text-2xl font-bold text-gray-900">{overallPct}%</p>
+          <p className="text-xs text-muted mt-0.5">materials opened</p>
         </div>
         <div className="bg-card rounded-xl border border-border p-5">
-          <p className="text-xs font-medium text-muted uppercase tracking-wider mb-1">Most Active Week</p>
-          <p className="text-2xl font-bold text-gray-900">{maxEngagement > 0 ? mostActiveWeek : '—'}</p>
+          <p className="text-xs font-medium text-muted uppercase tracking-wider mb-1">Avg. Reads / Week</p>
+          <p className="text-2xl font-bold text-gray-900">{avgReadsPerWeek}</p>
+          <p className="text-xs text-muted mt-0.5">per member per week</p>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-5">
+          <p className="text-xs font-medium text-muted uppercase tracking-wider mb-1">Most Engaged</p>
+          <p className="text-2xl font-bold text-gray-900 truncate">{mostEngagedName}</p>
+          {mostEngagedScore > 0 && <p className="text-xs text-muted mt-0.5">{mostEngagedScore} total actions</p>}
         </div>
         <div className="bg-card rounded-xl border border-border p-5">
           <p className="text-xs font-medium text-muted uppercase tracking-wider mb-1">Fully Complete</p>
           <p className="text-2xl font-bold text-gray-900">{fullyComplete} <span className="text-sm font-normal text-muted">of {members.length}</span></p>
         </div>
-        <div className="bg-card rounded-xl border border-border p-5">
-          <p className="text-xs font-medium text-muted uppercase tracking-wider mb-1">Active Weeks</p>
-          <p className="text-2xl font-bold text-gray-900">{activeWeeks.length}</p>
-        </div>
       </div>
 
-      {/* Week Engagement Chart */}
+      {/* Week Engagement — material-level detail per week */}
       <div className="bg-card rounded-xl border border-border p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-1">Week Engagement</h3>
-        <p className="text-xs text-muted mb-4">Indicators completed per week across all members (opened + commented + scored + delivered)</p>
+        <p className="text-xs text-muted mb-4">How members are engaging with required materials each week</p>
         {activeWeeks.length === 0 ? (
           <p className="text-sm text-muted">No weeks with required materials yet.</p>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {activeWeeks.map(week => {
-              const eng = weekEngagement[week]
-              const pct = maxPerWeek > 0 ? (eng / maxPerWeek) * 100 : 0
-              const isTop = week === mostActiveWeek && maxEngagement > 0
+              const required = weekRequiredMaterials[week]
+              const ws = weekStats[week]
+              const sessions = weekSessions[week] || []
+              const openedPct = members.length > 0 && required.length > 0
+                ? Math.round((ws.avgOpened / required.length) * 100)
+                : 0
+
               return (
-                <div key={week} className="flex items-center gap-3">
-                  <span className={`w-16 text-xs font-medium ${isTop ? 'text-amber-600' : 'text-muted'}`}>{week}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-6 relative overflow-hidden">
+                <div key={week} className="rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <span className="text-sm font-semibold text-gray-900">{week}</span>
+                      <span className="text-xs text-muted ml-2">{required.length} required materials</span>
+                      {sessions.length > 0 && (
+                        <span className="text-xs text-muted ml-2">· {sessions.length} session{sessions.length > 1 ? 's' : ''}</span>
+                      )}
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      openedPct >= 75 ? 'bg-green-100 text-green-700'
+                        : openedPct >= 40 ? 'bg-amber-100 text-amber-700'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}>{openedPct}% avg opened</span>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-100 rounded-full h-2 mb-3">
                     <div
-                      className={`h-full rounded-full transition-all ${isTop ? 'bg-amber-400' : 'bg-primary/70'}`}
-                      style={{ width: `${Math.max(pct, 0)}%` }}
+                      className={`h-2 rounded-full transition-all ${
+                        openedPct >= 75 ? 'bg-green-500' : openedPct >= 40 ? 'bg-amber-400' : 'bg-gray-300'
+                      }`}
+                      style={{ width: `${openedPct}%` }}
                     />
-                    <span className={`absolute inset-0 flex items-center px-3 text-xs font-medium ${pct > 35 ? 'text-white' : 'text-gray-500'}`}>
-                      {eng}/{maxPerWeek}{isTop ? ' — Most Active' : ''}
-                    </span>
+                  </div>
+                  {/* Detail chips */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                    <span>{ws.avgOpened.toFixed(1)}/{required.length} avg materials opened</span>
+                    <span>{ws.scoredMembers}/{members.length} members scored</span>
+                    <span>{ws.commentedMembers}/{members.length} commented</span>
+                    <span>{ws.deliveredMembers}/{members.length} delivered</span>
                   </div>
                 </div>
               )
@@ -534,11 +655,11 @@ function UnifiedProgressView({
         )}
       </div>
 
-      {/* Individual Progress */}
+      {/* Individual Progress — material-level detail */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <h3 className="text-sm font-semibold text-gray-900 mb-0.5">Individual Progress</h3>
-          <p className="text-xs text-muted">Click a member to see their weekly breakdown</p>
+          <p className="text-xs text-muted">Click a member to see which materials they opened, scored, commented on, and delivered</p>
         </div>
 
         {members.length === 0 && (
@@ -547,7 +668,7 @@ function UnifiedProgressView({
 
         <div className="divide-y divide-border">
           {members.map(user => {
-            const overall = getUserOverall(user.id)
+            const overallPctUser = getUserOverallPct(user.id)
             const isExpanded = expandedUser === user.id
 
             return (
@@ -565,41 +686,37 @@ function UnifiedProgressView({
                     <p className="text-xs text-muted truncate">{user.email}</p>
                   </div>
 
-                  {/* Mini week dots */}
+                  {/* Mini week dots — show materials opened count */}
                   <div className="hidden sm:flex items-center gap-1">
                     {activeWeeks.map(week => {
-                      const ind = userProgressMap[user.id]?.[week]
-                      const count = ind ? [ind.opened, ind.commented, ind.scored, ind.delivered].filter(Boolean).length : 0
-                      const bg = count === 4
+                      const s = getUserWeekStats(user.id, week)
+                      const bg = s.opened === s.total && s.total > 0
                         ? 'bg-green-500'
-                        : count >= 2
+                        : s.opened > 0
                           ? 'bg-amber-400'
-                          : count >= 1
-                            ? 'bg-blue-400'
-                            : 'bg-gray-200'
+                          : 'bg-gray-200'
                       return (
                         <div
                           key={week}
                           className={`w-5 h-5 rounded ${bg} flex items-center justify-center`}
-                          title={`${week}: ${count}/4`}
+                          title={`${week}: ${s.opened}/${s.total} opened`}
                         >
-                          <span className="text-[9px] font-bold text-white">{count}</span>
+                          <span className="text-[9px] font-bold text-white">{s.opened}</span>
                         </div>
                       )
                     })}
                   </div>
 
-                  {/* Progress bar */}
                   <div className="flex items-center gap-2 w-28">
                     <div className="flex-1 bg-gray-100 rounded-full h-2">
                       <div
                         className={`h-2 rounded-full transition-all ${
-                          overall.pct === 100 ? 'bg-green-500' : overall.pct > 0 ? 'bg-primary' : 'bg-gray-200'
+                          overallPctUser === 100 ? 'bg-green-500' : overallPctUser > 0 ? 'bg-primary' : 'bg-gray-200'
                         }`}
-                        style={{ width: `${overall.pct}%` }}
+                        style={{ width: `${overallPctUser}%` }}
                       />
                     </div>
-                    <span className="text-xs font-medium text-gray-600 w-8 text-right">{overall.pct}%</span>
+                    <span className="text-xs font-medium text-gray-600 w-8 text-right">{overallPctUser}%</span>
                   </div>
 
                   <svg
@@ -610,35 +727,113 @@ function UnifiedProgressView({
                   </svg>
                 </div>
 
-                {/* Expanded: per-week indicators */}
+                {/* Expanded: per-week material-level detail */}
                 {isExpanded && (
-                  <div className="bg-gray-50 border-t border-border px-5 py-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                      {activeWeeks.map(week => {
-                        const ind = userProgressMap[user.id]?.[week] || { opened: false, commented: false, scored: false, delivered: false }
-                        const count = [ind.opened, ind.commented, ind.scored, ind.delivered].filter(Boolean).length
-                        const allDone = count === 4
-                        return (
-                          <div
-                            key={week}
-                            className={`rounded-lg border p-3 ${allDone ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'}`}
-                          >
-                            <div className="flex items-center justify-between mb-2.5">
-                              <span className="text-xs font-semibold text-gray-800">{week}</span>
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                                allDone ? 'bg-green-100 text-green-700' : count > 0 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'
-                              }`}>{count}/4</span>
+                  <div className="bg-gray-50 border-t border-border px-5 py-4 space-y-4">
+                    {activeWeeks.map(week => {
+                      const required = weekRequiredMaterials[week]
+                      const stats = getUserWeekStats(user.id, week)
+                      const sessions = weekSessions[week] || []
+                      const deliverable = userDeliverablesMap[user.id]?.[week]
+
+                      return (
+                        <div key={week} className="rounded-lg border border-gray-200 bg-white">
+                          {/* Week header */}
+                          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-gray-900">{week}</span>
+                              <span className="text-xs text-muted">{stats.opened}/{stats.total} opened · {stats.scored}/{stats.total} scored · {stats.commented}/{stats.total} commented</span>
                             </div>
-                            <div className="space-y-1.5">
-                              <IndicatorRow label="Opened" active={ind.opened} activeColor="bg-blue-50 text-blue-700" />
-                              <IndicatorRow label="Commented" active={ind.commented} activeColor="bg-amber-50 text-amber-700" />
-                              <IndicatorRow label="Scored" active={ind.scored} activeColor="bg-purple-50 text-purple-700" />
-                              <IndicatorRow label="Delivered" active={ind.delivered} activeColor="bg-green-50 text-green-700" />
-                            </div>
+                            {stats.opened === stats.total && stats.total > 0 ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">All Read</span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{Math.round((stats.opened / stats.total) * 100)}%</span>
+                            )}
                           </div>
-                        )
-                      })}
-                    </div>
+
+                          {/* Material list */}
+                          <div className="divide-y divide-gray-50">
+                            {required.map(mat => {
+                              const detail = getMaterialDetail(user.id, mat.id)
+                              return (
+                                <div key={mat.id} className="px-4 py-2.5 flex items-start gap-3">
+                                  {/* Status dot */}
+                                  <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                    detail.viewCount > 0 ? 'bg-green-500' : 'bg-gray-300'
+                                  }`} />
+                                  {/* Material info */}
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm truncate ${detail.viewCount > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                                      {mat.title || mat.id}
+                                    </p>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                      {/* Tier */}
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                        normalizeTier(mat.material_tier) === 'mustread'
+                                          ? 'bg-amber-100 text-amber-700'
+                                          : 'bg-blue-100 text-blue-700'
+                                      }`}>{tierLabel(mat.material_tier)}</span>
+
+                                      {/* View info */}
+                                      {detail.viewCount > 0 ? (
+                                        <span className="text-[10px] text-muted">
+                                          {detail.viewCount} view{detail.viewCount > 1 ? 's' : ''}
+                                          {detail.firstView && (
+                                            <> · first {new Date(detail.firstView.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
+                                          )}
+                                          {detail.reopened && detail.lastView && (
+                                            <> · reopened {new Date(detail.lastView.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
+                                          )}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-gray-400">Not opened</span>
+                                      )}
+
+                                      {/* Score */}
+                                      {detail.vote ? (
+                                        <span className="text-[10px] text-purple-600">
+                                          Score: {((detail.vote.quality_score + detail.vote.relevance_score) / 2).toFixed(1)}/5
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-gray-400">No score</span>
+                                      )}
+
+                                      {/* Comment */}
+                                      {detail.vote?.comment && detail.vote.comment.trim() !== '' ? (
+                                        <span className="text-[10px] text-amber-600">Commented</span>
+                                      ) : (
+                                        <span className="text-[10px] text-gray-400">No comment</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+
+                          {/* Deliverable + Sessions footer */}
+                          <div className="px-4 py-2.5 border-t border-gray-100 flex flex-wrap gap-x-4 gap-y-1">
+                            {deliverable ? (
+                              <span className="text-xs text-green-700">
+                                Delivered {new Date(deliverable.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                {deliverable.link && (
+                                  <a href={deliverable.link} target="_blank" rel="noopener noreferrer" className="ml-1 underline hover:text-green-900">Link</a>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">Deliverable pending</span>
+                            )}
+                            {sessions.length > 0 ? (
+                              <span className="text-xs text-muted">
+                                Sessions: {sessions.map(s => SESSION_TYPE_LABEL[s.session_type] || s.title).join(', ')}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">No sessions</span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -646,21 +841,6 @@ function UnifiedProgressView({
           })}
         </div>
       </div>
-    </div>
-  )
-}
-
-function IndicatorRow({ label, active, activeColor }: { label: string; active: boolean; activeColor: string }) {
-  return (
-    <div className={`flex items-center gap-2 px-2 py-1 rounded text-xs ${active ? activeColor : 'bg-gray-50 text-gray-400'}`}>
-      {active ? (
-        <svg className="w-3 h-3 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-        </svg>
-      ) : (
-        <span className="w-3 h-3 rounded-full border border-gray-300 flex-shrink-0" />
-      )}
-      <span>{label}</span>
     </div>
   )
 }
