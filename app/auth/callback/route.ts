@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -11,7 +12,7 @@ export async function GET(request: Request) {
   const redirectBase = isLocalEnv ? origin : forwardedHost ? `https://${forwardedHost}` : origin
 
   if (code) {
-    const response = NextResponse.redirect(`${redirectBase}${next}`)
+    const cookieStore = await cookies()
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,15 +20,11 @@ export async function GET(request: Request) {
       {
         cookies: {
           getAll() {
-            const cookieHeader = request.headers.get('cookie') || ''
-            return cookieHeader.split(';').filter(Boolean).map(cookie => {
-              const [name, ...rest] = cookie.trim().split('=')
-              return { name, value: rest.join('=') }
-            })
+            return cookieStore.getAll()
           },
           setAll(cookiesToSet) {
             cookiesToSet.forEach(({ name, value, options }) => {
-              response.cookies.set(name, value, options)
+              cookieStore.set(name, value, options)
             })
           },
         },
@@ -35,8 +32,8 @@ export async function GET(request: Request) {
     )
 
     const { data, error: authError } = await supabase.auth.exchangeCodeForSession(code)
+
     if (!authError && data.user) {
-      // Ensure profile exists (handles users who existed before a DB reset)
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
@@ -52,10 +49,12 @@ export async function GET(request: Request) {
         })
       }
 
-      return response
+      return NextResponse.redirect(`${redirectBase}${next}`)
     }
+
+    const errorMsg = authError ? authError.message : 'user_not_found'
+    return NextResponse.redirect(`${redirectBase}/login?error=${encodeURIComponent(errorMsg)}`)
   }
 
-  const errorDetail = code ? `code_exchange_failed` : 'no_code_received'
-  return NextResponse.redirect(`${redirectBase}/login?error=${encodeURIComponent(errorDetail)}`)
+  return NextResponse.redirect(`${redirectBase}/login?error=no_code_received`)
 }
