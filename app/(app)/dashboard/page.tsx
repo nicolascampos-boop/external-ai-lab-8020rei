@@ -218,12 +218,6 @@ export default async function DashboardPage() {
         <Link href="/library" className="text-xs font-medium text-primary hover:text-primary-dark bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
           Browse Library
         </Link>
-        <Link href="/library?score_filter=none" className="text-xs font-medium text-primary hover:text-primary-dark bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
-          Review Unscored
-        </Link>
-        <Link href="/upload" className="text-xs font-medium text-primary hover:text-primary-dark bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
-          Upload Material
-        </Link>
       </div>
 
       {/* ─── Activity Feed ────────────────────────────────────────────────── */}

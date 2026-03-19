@@ -1,22 +1,12 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-import UploadPageClient from './client'
+'use client'
 
-export default async function UploadPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+import { useState } from 'react'
+import UploadForm from '@/components/upload-form'
+import SingleMaterialForm from '@/components/single-material-form'
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+type Tab = 'single' | 'bulk'
 
-  if (profile?.role !== 'admin') redirect('/dashboard')
-
-  return <UploadPageClient />
-}
+export default function UploadPageClient() {
   const [tab, setTab] = useState<Tab>('single')
 
   return (
