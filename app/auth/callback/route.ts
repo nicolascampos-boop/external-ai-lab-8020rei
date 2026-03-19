@@ -54,8 +54,10 @@ export async function GET(request: Request) {
 
       return response
     }
+
+    const errorMsg = authError ? authError.message : 'user_not_found'
+    return NextResponse.redirect(`${redirectBase}/login?error=${encodeURIComponent(errorMsg)}`)
   }
 
-  const errorDetail = code ? `code_exchange_failed` : 'no_code_received'
-  return NextResponse.redirect(`${redirectBase}/login?error=${encodeURIComponent(errorDetail)}`)
+  return NextResponse.redirect(`${redirectBase}/login?error=no_code_received`)
 }
