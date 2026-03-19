@@ -1,9 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import VoteWidget from '@/components/vote-widget'
-import ReviewReactions from '@/components/review-reactions'
-import CommentReplies from '@/components/comment-replies'
 
 const CONTENT_TYPE_COLORS: Record<string, string> = {
   'Video': 'bg-rose-100 text-rose-700',
@@ -59,77 +56,6 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
     source: viewSource,
   }).then(() => {})
 
-  // Get uploader info
-  const { data: uploader } = material.uploaded_by
-    ? await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('id', material.uploaded_by)
-        .single()
-    : { data: null }
-
-  // Get current user's vote
-  const { data: existingVote } = await supabase
-    .from('votes')
-    .select('quality_score, relevance_score, comment')
-    .eq('material_id', id)
-    .eq('user_id', user!.id)
-    .single()
-
-  // Get all votes for this material
-  const { data: votes } = await supabase
-    .from('votes')
-    .select('id, quality_score, relevance_score, comment, created_at, user_id, profiles(full_name, email)')
-    .eq('material_id', id)
-    .order('created_at', { ascending: false })
-
-  // Get reaction counts and user reactions for each vote
-  const voteIds = votes?.map(v => v.id) || []
-  const { data: reactions } = voteIds.length > 0
-    ? await supabase
-        .from('vote_reactions')
-        .select('vote_id, user_id, reaction')
-        .in('vote_id', voteIds)
-    : { data: [] }
-
-  // Get replies for all votes on this material
-  const { data: allReplies } = voteIds.length > 0
-    ? await supabase
-        .from('vote_replies')
-        .select('id, vote_id, content, created_at, user_id, profiles(full_name, email)')
-        .in('vote_id', voteIds)
-        .order('created_at', { ascending: true })
-    : { data: [] }
-
-  // Group replies by vote_id
-  type ReplyRow = NonNullable<typeof allReplies>[number]
-  const repliesByVote = (allReplies || []).reduce((acc, r) => {
-    if (!acc[r.vote_id]) acc[r.vote_id] = []
-    acc[r.vote_id].push(r)
-    return acc
-  }, {} as Record<string, ReplyRow[]>)
-
-  // Calculate reaction counts and user reactions per vote
-  const reactionsByVote = (reactions || []).reduce((acc, r) => {
-    if (!acc[r.vote_id]) {
-      acc[r.vote_id] = { likes: 0, dislikes: 0, userReaction: null }
-    }
-    if (r.reaction === 'like') acc[r.vote_id].likes++
-    if (r.reaction === 'dislike') acc[r.vote_id].dislikes++
-    if (r.user_id === user!.id) acc[r.vote_id].userReaction = r.reaction
-    return acc
-  }, {} as Record<string, { likes: number; dislikes: number; userReaction: 'like' | 'dislike' | null }>)
-
-  // avg_quality / avg_relevance / avg_overall from the view already blend
-  // initial_quality/relevance as a baseline, so use them directly.
-  const hasScore = material.avg_overall > 0
-  const overallScore = hasScore ? Number(material.avg_overall).toFixed(1) : null
-  const scoreLabel = hasScore
-    ? `Overall Score${material.vote_count > 0 ? ` (${material.vote_count} ${material.vote_count === 1 ? 'review' : 'reviews'})` : ''}`
-    : 'No Score Yet'
-
-  const displayQuality = material.avg_quality > 0 ? Number(material.avg_quality).toFixed(1) : '—'
-  const displayRelevance = material.avg_relevance > 0 ? Number(material.avg_relevance).toFixed(1) : '—'
 
   return (
     <div className="max-w-4xl">
@@ -141,9 +67,9 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
         {backLabel}
       </Link>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* Main content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           {/* Material info */}
           <div className="bg-card rounded-xl border border-border p-6">
             {/* Badges */}
@@ -235,110 +161,10 @@ export default async function MaterialDetailPage({ params, searchParams }: Props
 
             {/* Meta info */}
             <div className="flex items-center gap-4 mt-5 pt-5 border-t border-border text-sm text-muted">
-              <span>Uploaded by {uploader?.full_name || uploader?.email || 'Unknown'}</span>
-              <span>{new Date(material.created_at).toLocaleDateString()}</span>
+              <span>Added {new Date(material.created_at).toLocaleDateString()}</span>
             </div>
           </div>
 
-          {/* Reviews list */}
-          <div className="bg-card rounded-xl border border-border p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">
-              Reviews ({material.vote_count})
-            </h3>
-            {votes && votes.length > 0 ? (
-              <div className="space-y-4">
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                {votes.map((vote: any) => {
-                  const profile = Array.isArray(vote.profiles) ? vote.profiles[0] : vote.profiles
-                  const reviewDate = new Date(vote.created_at).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                  })
-                  const voteReactions = reactionsByVote[vote.id] || { likes: 0, dislikes: 0, userReaction: null }
-                  return (
-                  <div key={vote.id} className="pb-4 border-b border-border last:border-0">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium flex-shrink-0">
-                          {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-700">
-                              {profile?.full_name || profile?.email || 'Anonymous'}
-                            </span>
-                            <span className="text-xs text-muted">•</span>
-                            <span className="text-xs text-muted">{reviewDate}</span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-xs text-muted">Quality: {vote.quality_score}/5</span>
-                            <span className="text-xs text-muted">Relevance: {vote.relevance_score}/5</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    {vote.comment && (
-                      <p className="text-sm text-gray-700 mt-2 ml-11">{vote.comment}</p>
-                    )}
-                    <div className="mt-3 ml-11">
-                      <ReviewReactions
-                        voteId={vote.id}
-                        initialLikes={voteReactions.likes}
-                        initialDislikes={voteReactions.dislikes}
-                        userReaction={voteReactions.userReaction}
-                      />
-                    </div>
-                    <CommentReplies
-                      voteId={vote.id}
-                      materialId={id}
-                      initialReplies={(repliesByVote[vote.id] || []) as any}
-                      currentUserId={user!.id}
-                    />
-                  </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-muted text-sm">No reviews yet. Be the first!</p>
-            )}
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Score summary */}
-          <div className="bg-card rounded-xl border border-border p-6 text-center">
-            <div className={`w-20 h-20 mx-auto rounded-2xl flex items-center justify-center text-3xl font-bold ${
-              !overallScore
-                ? 'bg-gray-100 text-gray-400'
-                : Number(overallScore) >= 4
-                  ? 'bg-green-100 text-green-700'
-                  : Number(overallScore) >= 3
-                    ? 'bg-yellow-100 text-yellow-700'
-                    : 'bg-red-100 text-red-700'
-            }`}>
-              {overallScore || '—'}
-            </div>
-            <p className="text-sm text-muted mt-3">{scoreLabel}</p>
-            <div className="flex justify-center gap-6 mt-4 text-sm">
-              <div>
-                <p className="font-semibold text-gray-900">{displayQuality}</p>
-                <p className="text-muted text-xs">Quality</p>
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{displayRelevance}</p>
-                <p className="text-muted text-xs">Relevance</p>
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{material.vote_count}</p>
-                <p className="text-muted text-xs">Votes</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Vote widget */}
-          <VoteWidget materialId={id} existingVote={existingVote} />
         </div>
       </div>
     </div>
