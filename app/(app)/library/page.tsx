@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import MaterialList from '@/components/material-list'
 import FilterBar from '@/components/filter-bar'
 import { CONTENT_TYPES } from '@/lib/supabase/types'
+import Link from 'next/link'
 
 interface Props {
   searchParams: Promise<{
@@ -179,6 +180,12 @@ export default async function LibraryPage({ searchParams }: Props) {
           <h1 className="text-2xl font-bold text-gray-900">Library</h1>
           <p className="text-muted mt-1">Browse and filter all training materials</p>
         </div>
+        <Link
+          href="/upload"
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors whitespace-nowrap"
+        >
+          + Upload Material
+        </Link>
       </div>
 
       <FilterBar
