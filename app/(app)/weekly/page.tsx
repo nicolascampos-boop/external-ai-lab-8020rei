@@ -6,7 +6,6 @@ import WeekLockToggle from '@/components/week-lock-toggle'
 import WeekSubmissionsToggle from '@/components/week-submissions-toggle'
 import DeliverableForm from '@/components/deliverable-form'
 import MemberResourcesSection from '@/components/member-resources-section'
-import WeekSessionsSection from '@/components/week-sessions-section'
 import SubmissionCard from '@/components/submission-card'
 import Link from 'next/link'
 import { WEEKS, WEEK_DESCRIPTIONS } from '@/lib/supabase/types'
@@ -183,7 +182,6 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
   const TABS = [
     { id: 'resources', label: '📚 Resources' },
     { id: 'objectives', label: '🎯 Objectives' },
-    { id: 'sessions', label: '🎬 Sessions' },
   ] as const
 
   return (
@@ -282,23 +280,21 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
             )}
           </div>
 
-          {/* Admin controls: lock toggle + submissions toggle + add materials */}
-          {isAdmin && (
-            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
-              {currentWeek !== 'Reference' && (
-                <>
-                  <WeekLockToggle week={currentWeek} isEnabled={isCurrentWeekEnabled} />
-                  <WeekSubmissionsToggle week={currentWeek} submissionsClosed={isSubmissionsClosed} />
-                </>
-              )}
-              <Link
-                href="/upload"
-                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors whitespace-nowrap"
-              >
-                Add Materials
-              </Link>
-            </div>
-          )}
+          {/* Controls: admin gets lock/submissions toggles; all users get upload button */}
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
+            {isAdmin && currentWeek !== 'Reference' && (
+              <>
+                <WeekLockToggle week={currentWeek} isEnabled={isCurrentWeekEnabled} />
+                <WeekSubmissionsToggle week={currentWeek} submissionsClosed={isSubmissionsClosed} />
+              </>
+            )}
+            <Link
+              href="/upload"
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors whitespace-nowrap"
+            >
+              + Upload Material
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -454,15 +450,6 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
             isAdmin={isAdmin}
           />
         </div>
-      )}
-
-      {/* Sessions Tab */}
-      {currentTab === 'sessions' && (
-        <WeekSessionsSection
-          week={currentWeek}
-          sessions={weekSessions ?? []}
-          isAdmin={isAdmin}
-        />
       )}
 
       {/* Objectives Tab — includes deliverable submission and community submissions */}
