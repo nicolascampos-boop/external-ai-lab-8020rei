@@ -31,7 +31,9 @@ export default async function DashboardPage() {
     { data: userViews },
     { count: totalMaterials },
     { data: recentVotes },
-    { data: topRated },
+    { data: topRatedHighlight },
+    { data: mostReviewedHighlight },
+    { data: topRatedFeed },
   ] = await Promise.all([
     supabase.from('materials').select('id, week, material_tier, title').not('week', 'is', null),
     supabase.from('votes').select('material_id').eq('user_id', user!.id),
@@ -39,6 +41,8 @@ export default async function DashboardPage() {
     supabase.from('material_views').select('material_id').eq('user_id', user!.id),
     supabase.from('materials').select('*', { count: 'exact', head: true }),
     supabase.from('votes').select('material_id, created_at').gte('created_at', weekAgo.toISOString()).order('created_at', { ascending: false }),
+    supabase.from('material_scores').select('*').gt('vote_count', 0).order('avg_overall', { ascending: false }).limit(1),
+    supabase.from('material_scores').select('*').gt('vote_count', 0).order('vote_count', { ascending: false }).limit(1),
     supabase.from('material_scores').select('*').gt('vote_count', 0).order('avg_overall', { ascending: false }).limit(8),
   ])
 
@@ -67,7 +71,6 @@ export default async function DashboardPage() {
   // Overall stats
   const totalRequired = weekProgress.reduce((sum, w) => sum + w.total, 0)
   const totalReviewed = weekProgress.reduce((sum, w) => sum + w.reviewed, 0)
-  const totalOpened = weekProgress.reduce((sum, w) => sum + w.opened, 0)
   const overallPct = totalRequired > 0 ? Math.round((totalReviewed / totalRequired) * 100) : 0
   const completedWeeks = weekProgress.filter(w => w.complete).length
 
@@ -95,7 +98,7 @@ export default async function DashboardPage() {
 
   // Merge trending + top rated, no duplicates
   const seenIds = new Set<string>()
-  type ScoredMaterial = NonNullable<typeof topRated>[number]
+  type ScoredMaterial = NonNullable<typeof topRatedFeed>[number]
   const activityFeed: { material: ScoredMaterial; badge: string }[] = []
 
   for (const m of trendingSorted) {
@@ -104,12 +107,15 @@ export default async function DashboardPage() {
       activityFeed.push({ material: m, badge: 'Trending' })
     }
   }
-  for (const m of (topRated || [])) {
+  for (const m of (topRatedFeed || [])) {
     if (!seenIds.has(m.id)) {
       seenIds.add(m.id)
       activityFeed.push({ material: m, badge: 'Top Rated' })
     }
   }
+
+  // Top article this week (trending by recent votes)
+  const topArticleThisWeek = trendingSorted[0] ?? null
 
   return (
     <div className="max-w-5xl">
@@ -118,7 +124,10 @@ export default async function DashboardPage() {
         <h1 className="text-xl font-bold text-gray-900">
           Welcome back, {profile?.full_name?.split(' ')[0] || 'there'}
         </h1>
-        <div className="flex flex-wrap items-center gap-3 mt-2">
+        <p className="text-sm text-muted mt-1 max-w-2xl">
+          8020REI&apos;s AI Training Lab — built to help you research, understand, and lead through the new AI wave. Track your progress, explore curated materials, and contribute to the community.
+        </p>
+        <div className="flex flex-wrap items-center gap-3 mt-3">
           <span className="inline-flex items-center gap-1.5 text-xs bg-primary/10 text-primary font-medium px-2.5 py-1 rounded-full">
             <span className="font-bold">{overallPct}%</span> progress
           </span>
@@ -224,6 +233,51 @@ export default async function DashboardPage() {
         <Link href="/upload" className="text-xs font-medium text-primary hover:text-primary-dark bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
           Upload Material
         </Link>
+      </div>
+
+      {/* ─── Community Highlights ─────────────────────────────────────────── */}
+      <div className="mb-6">
+        <h2 className="text-sm font-semibold text-gray-900 mb-3">Community Highlights This Week</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Top Article This Week */}
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-orange-600 mb-1">🔥 Top Article This Week</p>
+            {topArticleThisWeek ? (
+              <>
+                <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">{topArticleThisWeek.title}</p>
+                <p className="text-xs text-muted mt-1">{weeklyVoteCounts[topArticleThisWeek.id] || 0} review{weeklyVoteCounts[topArticleThisWeek.id] !== 1 ? 's' : ''} this week</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">No activity yet this week</p>
+            )}
+          </div>
+
+          {/* Highest Rated */}
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-yellow-600 mb-1">⭐ Highest Rated</p>
+            {topRatedHighlight && topRatedHighlight[0] ? (
+              <>
+                <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">{topRatedHighlight[0].title}</p>
+                <p className="text-xs text-muted mt-1">{topRatedHighlight[0].avg_overall?.toFixed(1)} avg score · {topRatedHighlight[0].vote_count} review{topRatedHighlight[0].vote_count !== 1 ? 's' : ''}</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">No ratings yet</p>
+            )}
+          </div>
+
+          {/* Most Reviewed */}
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600 mb-1">💬 Most Reviewed</p>
+            {mostReviewedHighlight && mostReviewedHighlight[0] ? (
+              <>
+                <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">{mostReviewedHighlight[0].title}</p>
+                <p className="text-xs text-muted mt-1">{mostReviewedHighlight[0].vote_count} review{mostReviewedHighlight[0].vote_count !== 1 ? 's' : ''} total</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">No reviews yet</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ─── Activity Feed ────────────────────────────────────────────────── */}
