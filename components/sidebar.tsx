@@ -11,10 +11,10 @@ const navItems = [
   { href: '/dashboard', label: 'Home', icon: DashboardIcon },
   { href: '/library', label: 'Library', icon: LibraryIcon },
   { href: '/weekly', label: 'Weekly Training', icon: WeeklyIcon },
-  { href: '/upload', label: 'Upload', icon: UploadIcon },
 ]
 
 const adminItems = [
+  { href: '/upload', label: 'Upload', icon: UploadIcon },
   { href: '/admin', label: 'Admin Panel', icon: AdminIcon },
 ]
 

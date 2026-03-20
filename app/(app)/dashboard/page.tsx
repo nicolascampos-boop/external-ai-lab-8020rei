@@ -227,12 +227,51 @@ export default async function DashboardPage() {
         <Link href="/library" className="text-xs font-medium text-primary hover:text-primary-dark bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
           Browse Library
         </Link>
-        <Link href="/library?score_filter=none" className="text-xs font-medium text-primary hover:text-primary-dark bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
-          Review Unscored
-        </Link>
-        <Link href="/upload" className="text-xs font-medium text-primary hover:text-primary-dark bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
-          Upload Material
-        </Link>
+      </div>
+
+      {/* ─── Community Highlights ─────────────────────────────────────────── */}
+      <div className="mb-6">
+        <h2 className="text-sm font-semibold text-gray-900 mb-3">Community Highlights This Week</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Top Article This Week */}
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-orange-600 mb-1">🔥 Top Article This Week</p>
+            {topArticleThisWeek ? (
+              <>
+                <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">{topArticleThisWeek.title}</p>
+                <p className="text-xs text-muted mt-1">{weeklyVoteCounts[topArticleThisWeek.id] || 0} review{weeklyVoteCounts[topArticleThisWeek.id] !== 1 ? 's' : ''} this week</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">No activity yet this week</p>
+            )}
+          </div>
+
+          {/* Highest Rated */}
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-yellow-600 mb-1">⭐ Highest Rated</p>
+            {topRatedHighlight && topRatedHighlight[0] ? (
+              <>
+                <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">{topRatedHighlight[0].title}</p>
+                <p className="text-xs text-muted mt-1">{topRatedHighlight[0].avg_overall?.toFixed(1)} avg score · {topRatedHighlight[0].vote_count} review{topRatedHighlight[0].vote_count !== 1 ? 's' : ''}</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">No ratings yet</p>
+            )}
+          </div>
+
+          {/* Most Reviewed */}
+          <div className="bg-card rounded-xl border border-border p-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600 mb-1">💬 Most Reviewed</p>
+            {mostReviewedHighlight && mostReviewedHighlight[0] ? (
+              <>
+                <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">{mostReviewedHighlight[0].title}</p>
+                <p className="text-xs text-muted mt-1">{mostReviewedHighlight[0].vote_count} review{mostReviewedHighlight[0].vote_count !== 1 ? 's' : ''} total</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">No reviews yet</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ─── Community Highlights ─────────────────────────────────────────── */}
