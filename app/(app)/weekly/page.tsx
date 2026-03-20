@@ -122,11 +122,6 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
   // Ensure Week 1 is always accessible (safety fallback)
   enabledWeeks.add('Week 1')
 
-  // Non-admin trying to access a locked week → redirect to Week 1
-  if (!isAdmin && !enabledWeeks.has(currentWeek)) {
-    redirect('/weekly')
-  }
-
   // Count materials per week in JS (1 query instead of N)
   const weekCounts: Record<string, number> = {}
   WEEKS.forEach(w => { weekCounts[w] = 0 })
@@ -174,10 +169,8 @@ export default async function WeeklyTrainingPage({ searchParams }: Props) {
   const isCurrentWeekEnabled = weekContent?.is_enabled ?? enabledWeeks.has(currentWeek)
   const isSubmissionsClosed = weekContent?.submissions_closed ?? false
 
-  // Visible tabs for non-admins: only enabled weeks (admins see all with lock indicators)
-  const visibleWeeks = isAdmin
-    ? WEEKS
-    : WEEKS.filter(w => enabledWeeks.has(w))
+  // All weeks are always visible; admins see lock indicators on disabled ones
+  const visibleWeeks = WEEKS
 
   const TABS = [
     { id: 'resources', label: '📚 Resources' },
